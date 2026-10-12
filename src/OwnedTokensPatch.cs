@@ -16,7 +16,7 @@ namespace BongoClaim {
         private const string MainTick = "__BongoClaim_RunFeatures_v1";
         private static AssemblyDefinition Template() {
             var stream = typeof(OwnedTokensPatch).Assembly.GetManifestResourceStream("BongoClaim.RuntimeTemplate.dll");
-            if (stream == null) throw new InvalidOperationException("Runtime feature resource missing. Rebuild BongoClaim.");
+            if (stream == null) throw new InvalidOperationException("Runtime feature resource missing. Rebuild Bongo Cat Auto Chest.");
             using (stream)
             using (var copy = new System.IO.MemoryStream()) {
                 stream.CopyTo(copy);

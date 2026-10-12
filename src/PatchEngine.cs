@@ -130,24 +130,24 @@ namespace BongoClaim
             if (!Calls(shape.Tick, shop.FullName, "OnChestReady") || !Calls(shape.CanBuy, "BongoCat.Pets", "CanSpendPets")) throw new InvalidOperationException("Unsupported game: readiness or affordability checks changed.");
             if (new[] { shape.Ready, shape.Tick }.Any(m => m.Body.ExceptionHandlers.Count != 0)) throw new InvalidOperationException("Unsupported game: timer exception layout changed.");
             var helpers = shop.Methods.Where(m => m.Name == Marker || m.Name == V2Marker || m.Name == LegacyMarker).ToArray();
-            if (helpers.Length > 1) throw new InvalidOperationException("Conflicting BongoClaim versions were detected. Restore the original first.");
+            if (helpers.Length > 1) throw new InvalidOperationException("Conflicting Bongo Cat Auto Chest versions were detected. Restore the original first.");
             shape.Helper = helpers.SingleOrDefault();
-            if (shape.Helper != null && (shape.Helper.IsStatic || shape.Helper.Parameters.Count != 0 || shape.Helper.ReturnType.FullName != "System.Boolean" || !shape.Helper.HasBody)) throw new InvalidOperationException("An invalid BongoClaim helper was detected. Restore the original before continuing.");
+            if (shape.Helper != null && (shape.Helper.IsStatic || shape.Helper.Parameters.Count != 0 || shape.Helper.ReturnType.FullName != "System.Boolean" || !shape.Helper.HasBody)) throw new InvalidOperationException("An invalid Bongo Cat Auto Chest helper was detected. Restore the original before continuing.");
             if (shape.Helper == null && (Calls(shape.Ready, item.FullName, "Buy") || Calls(shape.Tick, item.FullName, "Buy"))) throw new InvalidOperationException("Another auto-claim mod is already present. Use Steam Verify integrity to restore an original game DLL first.");
-            if (shape.Helper != null && (!Calls(shape.Ready, shop.FullName, shape.Helper.Name) || !Calls(shape.Tick, shop.FullName, shape.Helper.Name))) throw new InvalidOperationException("An incomplete BongoClaim patch was detected. Restore through this tool or Steam before continuing.");
+            if (shape.Helper != null && (!Calls(shape.Ready, shop.FullName, shape.Helper.Name) || !Calls(shape.Tick, shop.FullName, shape.Helper.Name))) throw new InvalidOperationException("An incomplete Bongo Cat Auto Chest patch was detected. Restore through this tool or Steam before continuing.");
             NativeControlsPatch.Validate(asm);
-            if (shape.Helper != null && (shape.Helper.Name == Marker || shape.Helper.Name == V2Marker) && !NativeControlsPatch.IsInstalled(asm)) throw new InvalidOperationException("The BongoClaim settings controls are incomplete. Restore the original before reinstalling.");
+            if (shape.Helper != null && (shape.Helper.Name == Marker || shape.Helper.Name == V2Marker) && !NativeControlsPatch.IsInstalled(asm)) throw new InvalidOperationException("The Bongo Cat Auto Chest settings controls are incomplete. Restore the original before reinstalling.");
             if (shape.Helper != null && (shape.Helper.Name == Marker || shape.Helper.Name == V2Marker))
             {
                 var option = shop.Fields.SingleOrDefault(f => f.Name == (shape.Helper.Name == Marker ? SettingsMarker : V2SettingsMarker));
-                if (option == null || !option.IsLiteral || !option.HasConstant || option.FieldType.FullName != "System.Boolean") throw new InvalidOperationException("The BongoClaim default setting is incomplete. Restore the original before reinstalling.");
+                if (option == null || !option.IsLiteral || !option.HasConstant || option.FieldType.FullName != "System.Boolean") throw new InvalidOperationException("The Bongo Cat Auto Chest default setting is incomplete. Restore the original before reinstalling.");
             }
             OwnedTokensPatch.Validate(asm);
             if (shape.Helper != null && shape.Helper.Name == Marker)
             {
                 var charge = item.Methods.SingleOrDefault(m => m.Name == ChargeMarker && m.IsStatic && m.Parameters.Count == 0 && m.ReturnType.FullName == "System.Boolean" && m.HasBody);
                 if (charge == null || !Calls(shape.Buy, item.FullName, ChargeMarker) || !Calls(shape.CanBuy, item.FullName, ChargeMarker) || !NativeControlsPatch.IsExtendedInstalled(asm) || !OwnedTokensPatch.IsInstalled(asm))
-                    throw new InvalidOperationException("The BongoClaim token or pet controls are incomplete. Restore the original before reinstalling.");
+                throw new InvalidOperationException("The Bongo Cat Auto Chest token or pet controls are incomplete. Restore the original before reinstalling.");
             }
             else if (shape.Helper == null)
             {

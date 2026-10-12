@@ -20,9 +20,9 @@ $commonArgs = @('/nologo', '/optimize+', '/platform:anycpu', "/reference:$cecilD
 if ($LASTEXITCODE -ne 0) { throw 'Runtime template compilation failed.' }
 $commonArgs += '/resource:artifacts\RuntimeTemplate.dll,BongoClaim.RuntimeTemplate.dll'
 Copy-Item -LiteralPath $cecilDll -Destination artifacts\Mono.Cecil.dll -Force
-& $compiler @commonArgs /target:winexe /out:artifacts\BongoClaim.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32manifest:src\app.manifest src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\MainForm.cs
+& $compiler @commonArgs /target:winexe /out:artifacts\BongoCatAutoChest.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32manifest:src\app.manifest src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\MainForm.cs
 if ($LASTEXITCODE -ne 0) { throw 'Desktop compilation failed.' }
-& $compiler @commonArgs /target:exe /out:artifacts\BongoClaim.Cli.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\MainForm.cs
+& $compiler @commonArgs /target:exe /out:artifacts\BongoCatAutoChest.Cli.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\MainForm.cs
 if ($LASTEXITCODE -ne 0) { throw 'CLI compilation failed.' }
 if ($Test) {
     & $compiler /nologo /optimize+ /target:library /out:artifacts\Assembly-CSharp.dll tests\GameFixture.cs
@@ -33,4 +33,4 @@ if ($Test) {
     & .\artifacts\BongoClaim.Tests.exe
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
 }
-Write-Output 'Built artifacts\BongoClaim.exe (portable desktop app) and BongoClaim.Cli.exe.'
+Write-Output 'Built artifacts\BongoCatAutoChest.exe (portable desktop app) and BongoCatAutoChest.Cli.exe.'

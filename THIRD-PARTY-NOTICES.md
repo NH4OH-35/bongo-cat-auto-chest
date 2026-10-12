@@ -1,6 +1,6 @@
 # Third-party notices
 
-BongoClaim ships Mono.Cecil 0.11.6, from [jbevain/cecil](https://github.com/jbevain/cecil), under the MIT license. It reads and writes managed metadata without executing the target assembly.
+Bongo Cat Auto Chest ships Mono.Cecil 0.11.6, from [jbevain/cecil](https://github.com/jbevain/cecil), under the MIT license. It reads and writes managed metadata without executing the target assembly.
 
 The build obtains the package from NuGet at the exact version and verifies the package's SHA-256:
 
@@ -35,7 +35,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Project references
 
-The archived [zelda0079/Bongo-Cat-Auto-Claim](https://github.com/zelda0079/Bongo-Cat-Auto-Claim) inspired this project's goal. Its game DLL is neither included in this source tree nor redistributed in releases. BongoClaim is a new patcher implementation, not a repackaging of that DLL.
+The archived [zelda0079/Bongo-Cat-Auto-Claim](https://github.com/zelda0079/Bongo-Cat-Auto-Claim) inspired this project's goal. Its game DLL is neither included in this source tree nor redistributed in releases. Bongo Cat Auto Chest is a new patcher implementation, not a repackaging of that DLL.
 
 [morluto/rea](https://github.com/morluto/rea), MIT licensed, was used for local static analysis during development. REA is not a runtime dependency or part of the downloaded package.
 

@@ -1,24 +1,24 @@
-# BongoClaim ฅ
+# Bongo Cat Auto Chest ฅ
 
-**Auto-claim normal and emote chests, open stored tokens, and control your pet score in Bongo Cat.** Install once, then play normally through Steam. BongoClaim does not need to stay open.
+**Auto-claim normal and emote chests, open stored tokens, and control your pet score in Bongo Cat.** Install once, then play normally through Steam. Bongo Cat Auto Chest does not need to stay open.
 
-[Download BongoClaim v1.2.0 for Windows](https://github.com/NH4OH-35/bongo-claim/releases/download/v1.2.0/BongoClaim-v1.2.0-windows.zip) · [All releases](https://github.com/NH4OH-35/bongo-claim/releases) · [Report a problem](https://github.com/NH4OH-35/bongo-claim/issues)
+[Download Bongo Cat Auto Chest v1.2.0 for Windows](https://github.com/NH4OH-35/bongo-cat-auto-chest/releases/download/v1.2.0/BongoCatAutoChest-v1.2.0-windows.zip) · [All releases](https://github.com/NH4OH-35/bongo-cat-auto-chest/releases) · [Report a problem](https://github.com/NH4OH-35/bongo-cat-auto-chest/issues)
 
-![BongoClaim v1.2 in Bongo Cat General settings: normal and emote auto-claim, Keep pets, token claim buttons, and pet score editor](docs/game-settings.png)
+![Bongo Cat Auto Chest v1.2 in Bongo Cat General settings: normal and emote auto-claim, Keep pets, token claim buttons, and pet score editor](docs/game-settings.png)
 
 The screenshot shows the current **v1.2** controls. Your token counts and pet score will differ. **Keep pets when claiming** is checked in this example; it starts **off** on a fresh installation.
 
 ## 1. Install or upgrade
 
-**Already using v1.2 and seeing these controls? Skip to step 2.** This documentation update does not require reinstalling the game patch.
+**Already using v1.2 and seeing these controls? Skip to step 2.** The project rename does not require reinstalling the game patch.
 
-1. Download **BongoClaim-v1.2.0-windows.zip** using the link above. Do not download GitHub's **Source code** ZIP for installation.
+1. Download **BongoCatAutoChest-v1.2.0-windows.zip** using the link above. Do not download GitHub's **Source code** ZIP for installation.
 2. Right-click the downloaded ZIP → **Extract All…** → **Extract**. Open the extracted folder; do not run the app from inside the ZIP.
 3. Exit **Bongo Cat** normally. Leave Steam available for launching the game later.
-4. Double-click **BongoClaim.exe**. Keep **Mono.Cecil.dll** in the same folder. **BongoClaim.Cli.exe** is optional and is not needed for normal use.
-5. Check the game folder shown in BongoClaim. If it is empty or wrong, click **Browse…** and select the folder containing **BongoCat.exe**. Select the **folder**, not the EXE file, **BongoCat_Data**, or **Managed**. You can find it through Steam → Bongo Cat → **Properties → Installed Files → Browse**.
+4. Double-click **BongoCatAutoChest.exe**. Keep **Mono.Cecil.dll** in the same folder. **BongoCatAutoChest.Cli.exe** is optional and is not needed for normal use.
+5. Check the game folder shown in Bongo Cat Auto Chest. If it is empty or wrong, click **Browse…** and select the folder containing **BongoCat.exe**. Select the **folder**, not the EXE file, **BongoCat_Data**, or **Managed**. You can find it through Steam → Bongo Cat → **Properties → Installed Files → Browse**.
 6. The helper checks the build automatically. You can click **Check build** to check again. If the build is supported, click **Install auto claim →**. Existing v1.0/v1.1 installations show **Upgrade controls →** instead.
-7. Wait for the success message. The button changes to **Controls installed**. Close BongoClaim and launch **Bongo Cat from Steam**.
+7. Wait for the success message. The button changes to **Controls installed**. Close Bongo Cat Auto Chest and launch **Bongo Cat from Steam**.
 
 The installer backs up your exact original game DLL before patching it. Upgrades use that verified original backup and preserve your saved normal/emote switch settings.
 
@@ -29,7 +29,7 @@ The installer backs up your exact original game DLL before patching it. Upgrades
 3. Click the **gear** tab, then **General**.
 4. Scroll down inside the panel until you see the rows shown in the screenshot.
 
-You only run BongoClaim again to install, upgrade, check compatibility, or restore the original game. Leave **Steam and Bongo Cat running** for auto-claim to work.
+You only run Bongo Cat Auto Chest again to install, upgrade, check compatibility, or restore the original game. Leave **Steam and Bongo Cat running** for auto-claim to work.
 
 ## 3. Turn automatic claims on or off
 
@@ -109,7 +109,7 @@ Requires **Windows 10 or 11**, **.NET Framework 4.8** (normally already installe
 ## Restore the original game
 
 1. Exit Bongo Cat normally.
-2. Open **BongoClaim.exe** and check the selected game folder.
+2. Open **BongoCatAutoChest.exe** and check the selected game folder.
 3. Click **Restore original** and wait for success.
 4. Close the helper and start Bongo Cat through Steam.
 
@@ -128,11 +128,11 @@ The helper verifies backup hashes before using them. If Steam changes the instal
 ## After a Steam update or an older replacement DLL
 
 1. Exit Bongo Cat after Steam finishes the update.
-2. Open BongoClaim and click **Check build**.
+2. Open Bongo Cat Auto Chest and click **Check build**.
 3. If the current build is supported and the patch is absent, install it again, then start the game through Steam. Previous backups are retained.
-4. If the layout is unsupported, wait for a compatible BongoClaim update and report your build ID.
+4. If the layout is unsupported, wait for a compatible Bongo Cat Auto Chest update and report your build ID.
 
-If you previously installed the archived replacement DLL, or your original backup is missing or damaged, use Steam → Bongo Cat → **Properties → Installed Files → Verify integrity of game files** to recover the current official files before applying BongoClaim.
+If you previously installed the archived replacement DLL, or your original backup is missing or damaged, use Steam → Bongo Cat → **Properties → Installed Files → Verify integrity of game files** to recover the current official files before applying Bongo Cat Auto Chest.
 
 ## Compatibility and validation
 
@@ -160,24 +160,24 @@ Run in PowerShell on Windows:
 
 No .NET SDK or Visual Studio is required. The build uses the Windows .NET Framework compiler and a pinned, hash-verified Mono.Cecil NuGet package. Outputs go in `artifacts/`; dependencies go in `tools/`. Neither directory is tracked.
 
-The release ZIP contains **BongoClaim.exe**, **BongoClaim.Cli.exe**, **Mono.Cecil.dll**, this README, **docs/game-settings.png**, and the licenses. The screenshot is included so it displays in the extracted instructions. No game DLL, test fixture, backup, save, or account data is packaged. The adjacent `.zip.sha256` file contains the expected SHA-256 hash for checking the ZIP.
+The release ZIP contains **BongoCatAutoChest.exe**, **BongoCatAutoChest.Cli.exe**, **Mono.Cecil.dll**, this README, **docs/game-settings.png**, and the licenses. The screenshot is included so it displays in the extracted instructions. No game DLL, test fixture, backup, save, or account data is packaged. The adjacent `.zip.sha256` file contains the expected SHA-256 hash for checking the ZIP.
 
 ## Command line
 
 For diagnostics and scripted use:
 
 ```powershell
-.\BongoClaim.Cli.exe --inspect 'G:\SteamLibrary\steamapps\common\BongoCat'
-.\BongoClaim.Cli.exe --install 'G:\SteamLibrary\steamapps\common\BongoCat'
-.\BongoClaim.Cli.exe --restore 'G:\SteamLibrary\steamapps\common\BongoCat'
-.\BongoClaim.Cli.exe --patch-copy 'path\Assembly-CSharp.dll' "$env:TEMP\patched-copy.dll"
+.\BongoCatAutoChest.Cli.exe --inspect 'G:\SteamLibrary\steamapps\common\BongoCat'
+.\BongoCatAutoChest.Cli.exe --install 'G:\SteamLibrary\steamapps\common\BongoCat'
+.\BongoCatAutoChest.Cli.exe --restore 'G:\SteamLibrary\steamapps\common\BongoCat'
+.\BongoCatAutoChest.Cli.exe --patch-copy 'path\Assembly-CSharp.dll' "$env:TEMP\patched-copy.dll"
 ```
 
 Both chest types default on. `--normal-only` makes the initial emote default off; a saved in-game preference takes precedence. `--emotes` remains accepted for compatibility with v1.0. `--verbose` includes a diagnostic stack trace. `--patch-copy` refuses to overwrite its source or an existing output.
 
 ## How the patch works
 
-The archived [Bongo-Cat-Auto-Claim](https://github.com/zelda0079/Bongo-Cat-Auto-Claim) distributes an older complete game DLL. BongoClaim patches the assembly actually installed on your PC, checks the expected structure, and retains your exact original for restoration.
+The archived [Bongo-Cat-Auto-Claim](https://github.com/zelda0079/Bongo-Cat-Auto-Claim) distributes an older complete game DLL. Bongo Cat Auto Chest patches the assembly actually installed on your PC, checks the expected structure, and retains your exact original for restoration.
 
 `PatchEngine.cs` inserts a guarded claim helper into the game's chest-ready callback and timer. It reads saved normal/emote switches and checks readiness and purchase locks before calling the original `ShopItem.Buy()`. The game's timer interval, purchase callbacks and failed-request cooldown are retained.
 
@@ -189,4 +189,4 @@ Development inspection used [REA](https://github.com/morluto/rea) and [Mono.Ceci
 
 ## License
 
-MIT for BongoClaim. This is an independent, unofficial project; it is not affiliated with Bongo Cat or Steam.
+MIT for Bongo Cat Auto Chest. This is an independent, unofficial project; it is not affiliated with Bongo Cat or Steam.

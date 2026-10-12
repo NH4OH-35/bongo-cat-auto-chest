@@ -21,7 +21,7 @@ namespace BongoClaim
 
         public MainForm()
         {
-            Text = "BongoClaim · chest helper";
+            Text = "Bongo Cat Auto Chest";
             ClientSize = new Size(670, 685);
             MinimumSize = new Size(670, 725);
             MaximumSize = new Size(870, 725);
@@ -34,7 +34,7 @@ namespace BongoClaim
             AutoScaleMode = AutoScaleMode.Dpi;
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             var mark = TextLabel("ฅ", 31, Mint); mark.SetBounds(28, 22, 55, 60); Controls.Add(mark);
-            var brand = TextLabel("BONGO CLAIM", 18, Color.White); brand.Font = new Font("Segoe UI", 18, FontStyle.Bold); brand.SetBounds(91, 28, 390, 35); Controls.Add(brand);
+            var brand = TextLabel("BONGO CAT AUTO CHEST", 18, Color.White); brand.Font = new Font("Segoe UI", 18, FontStyle.Bold); brand.SetBounds(91, 28, 390, 35); Controls.Add(brand);
             var subtitle = TextLabel("Your cat keeps playing. Your chests get claimed.", 10, Muted); subtitle.SetBounds(92, 66, 490, 24); Controls.Add(subtitle);
             var badge = TextLabel("WINDOWS  /  v1.2", 8, Mint); badge.SetBounds(520, 34, 125, 22); Controls.Add(badge);
             var rule = new Panel { BackColor = PanelColor }; rule.SetBounds(30, 110, 610, 1); Controls.Add(rule);
@@ -55,7 +55,7 @@ namespace BongoClaim
             install = MakeButton("Install auto claim  →", true, delegate { RunChange(false); }); install.SetBounds(164, 545, 282, 44); Controls.Add(install);
             restore = MakeButton("Restore original", false, delegate { RunChange(true); }); restore.SetBounds(460, 545, 180, 44); Controls.Add(restore);
             var foot = TextLabel("Exit Bongo Cat before installing or restoring. Claims consume real owned\ntokens. The helper can be closed after installation.", 9, Muted); foot.SetBounds(30, 604, 610, 43); Controls.Add(foot);
-            var github = new LinkLabel { Text = "Source & downloads ↗", LinkColor = Mint, ActiveLinkColor = Color.White, VisitedLinkColor = Mint, BackColor = Ink, Font = new Font("Segoe UI", 9), AutoSize = true }; github.SetBounds(30, 655, 230, 20); github.LinkClicked += delegate { Process.Start("https://github.com/NH4OH-35/bongo-claim"); }; Controls.Add(github);
+            var github = new LinkLabel { Text = "Source & downloads ↗", LinkColor = Mint, ActiveLinkColor = Color.White, VisitedLinkColor = Mint, BackColor = Ink, Font = new Font("Segoe UI", 9), AutoSize = true }; github.SetBounds(30, 655, 230, 20); github.LinkClicked += delegate { Process.Start("https://github.com/NH4OH-35/bongo-cat-auto-chest"); }; Controls.Add(github);
             var offline = TextLabel("LOCAL TOOL · NO LOGIN · NO KEY SIMULATION", 8, Muted); offline.SetBounds(342, 657, 310, 20); Controls.Add(offline);
             Shown += delegate { folder.Text = FindGame(); CheckGame(); };
             FormClosing += delegate(object sender, FormClosingEventArgs e) { if (isBusy) e.Cancel = true; };

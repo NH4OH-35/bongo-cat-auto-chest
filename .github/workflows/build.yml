@@ -18,8 +18,8 @@ jobs:
         run: ./package.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: BongoClaim-windows
+          name: BongoCatAutoChest-windows
           path: |
-            artifacts/BongoClaim-v1.2.0-windows.zip
-            artifacts/BongoClaim-v1.2.0-windows.zip.sha256
+            artifacts/BongoCatAutoChest-v1.2.0-windows.zip
+            artifacts/BongoCatAutoChest-v1.2.0-windows.zip.sha256
           if-no-files-found: error

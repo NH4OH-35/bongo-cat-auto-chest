@@ -1,11 +1,11 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
-$releaseName = 'BongoClaim-v1.2.0-windows'
+$releaseName = 'BongoCatAutoChest-v1.2.0-windows'
 $packageFolder = Join-Path $PSScriptRoot "artifacts\$releaseName"
 New-Item -ItemType Directory -Path $packageFolder -Force | Out-Null
 $files = [ordered]@{
-    'BongoClaim.exe' = 'artifacts\BongoClaim.exe'
-    'BongoClaim.Cli.exe' = 'artifacts\BongoClaim.Cli.exe'
+    'BongoCatAutoChest.exe' = 'artifacts\BongoCatAutoChest.exe'
+    'BongoCatAutoChest.Cli.exe' = 'artifacts\BongoCatAutoChest.Cli.exe'
     'Mono.Cecil.dll' = 'artifacts\Mono.Cecil.dll'
     'README.md' = 'README.md'
     'LICENSE' = 'LICENSE'
