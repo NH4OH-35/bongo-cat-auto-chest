@@ -61,7 +61,9 @@ The current original assembly was successfully patched as a separate copy and re
 
 Seventeen executable tests use a source-owned simulated game assembly to cover normal claims, eligibility, affordability, pending requests, emote opt-in, retrying an already-visible chest, null references, duplicate prevention, install idempotence, corrupted backups, Steam updates, unsupported layouts and exact restoration.
 
-**Live Steam chest delivery has not yet been observed in this initial release.** The desktop UI and current-build patching have been checked; actual rewards remain subject to the game's normal server behavior. Please report your build ID, normal/emote mode, and the error text if a claim fails.
+**A live normal-chest smoke test passed on 12 October 2026.** After installing on build 25723683 and restarting through Steam, the normal ready-chest indicator disappeared and the normal 30-minute cooldown began without a manual claim click. The emote chest stayed ready in normal-only mode. The game's successful purchase callback starts that cooldown; its failed-request path instead retries after 60 seconds. No exceptions or runtime errors were found in the game log. The original backup matched its recorded SHA-256 exactly.
+
+This verifies the normal auto-claim flow on that installation. The awarded cosmetic's identity was not recorded, emote claiming was not live-tested, and future builds or server behavior remain outside this check. Please report your build ID, normal/emote mode, and error text if a claim fails.
 
 ## Requirements and troubleshooting
 
