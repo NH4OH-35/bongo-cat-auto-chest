@@ -1,0 +1,5 @@
+tools/
+artifacts/
+*.user
+*.log
+.vs/
