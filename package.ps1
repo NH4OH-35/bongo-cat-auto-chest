@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
-$releaseName = 'BongoClaim-v1.0.0-windows'
+$releaseName = 'BongoClaim-v1.1.0-windows'
 $packageFolder = Join-Path $PSScriptRoot "artifacts\$releaseName"
 New-Item -ItemType Directory -Path $packageFolder -Force | Out-Null
 $files = @('artifacts\BongoClaim.exe','artifacts\BongoClaim.Cli.exe','artifacts\Mono.Cecil.dll','README.md','LICENSE','THIRD-PARTY-NOTICES.md')

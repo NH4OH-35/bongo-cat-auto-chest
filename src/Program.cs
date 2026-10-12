@@ -20,7 +20,8 @@ namespace BongoClaim
             {
                 try
                 {
-                    bool emotes = Array.IndexOf(args, "--emotes") >= 0;
+                    bool emotes = Array.IndexOf(args, "--normal-only") < 0;
+                    if (!emotes && Array.IndexOf(args, "--emotes") >= 0) throw new ArgumentException("Choose either --normal-only or --emotes, not both.");
                     switch (args[0])
                     {
                         case "--inspect":
@@ -31,12 +32,12 @@ namespace BongoClaim
                             Console.WriteLine("SHA256: " + result.Hash);
                             return result.Supported ? 0 : 2;
                         case "--patch-copy":
-                            if (args.Length < 3) throw new ArgumentException("Usage: --patch-copy <input DLL> <new output DLL> [--emotes]");
+                            if (args.Length < 3) throw new ArgumentException("Usage: --patch-copy <input DLL> <new output DLL> [--normal-only]");
                             PatchEngine.PatchCopy(args[1], args[2], emotes);
                             Console.WriteLine("Patched copy verified. Original untouched.");
                             return 0;
                         case "--install":
-                            if (args.Length < 2) throw new ArgumentException("Usage: --install <game folder> [--emotes]");
+                            if (args.Length < 2) throw new ArgumentException("Usage: --install <game folder> [--normal-only]");
                             Console.WriteLine(PatchEngine.Install(args[1], emotes));
                             return 0;
                         case "--restore":
@@ -44,8 +45,11 @@ namespace BongoClaim
                             Console.WriteLine(PatchEngine.Restore(args[1]));
                             return 0;
                         default:
-                            Console.WriteLine("BongoClaim 1.0.0 — run without arguments for the desktop app.");
-                            Console.WriteLine("Commands: --inspect, --patch-copy, --install, --restore. Optional: --emotes.");
+                            Console.WriteLine("BongoClaim 1.1.0 — run without arguments for the desktop app.");
+                            Console.WriteLine("Commands: --inspect, --patch-copy, --install, --restore. Both chest types start enabled.");
+                            Console.WriteLine("Optional: --normal-only starts emote claims disabled; --emotes is accepted for compatibility.");
+                            Console.WriteLine("After installation, change either toggle live in Bongo Cat Settings > General.");
+                            Console.WriteLine("Keyboard: open the game menu, then F7 for normal or F9 for emote. Choices are saved.");
                             return args[0] == "--help" ? 0 : 2;
                     }
                 }

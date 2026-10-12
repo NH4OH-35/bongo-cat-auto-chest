@@ -14,13 +14,13 @@ namespace BongoClaim
     public sealed class Inspection
     {
         public string Path, Hash, Message;
-        public bool Supported, Installed, Emotes;
+        public bool Supported, Installed, Emotes, RuntimeControls;
     }
 
     [DataContract]
     public sealed class InstallState
     {
-        [DataMember] public int Version = 1;
+        [DataMember] public int Version = 2;
         [DataMember] public string OriginalHash;
         [DataMember] public string PatchedHash;
         [DataMember] public bool Emotes;
@@ -29,8 +29,11 @@ namespace BongoClaim
 
     public static class PatchEngine
     {
-        public const string Marker = "__BongoClaim_TryClaim_v1";
-        public const string SettingsMarker = "__BongoClaim_Emotes_v1";
+        public const string Marker = "__BongoClaim_TryClaim_v2";
+        public const string LegacyMarker = "__BongoClaim_TryClaim_v1";
+        public const string SettingsMarker = "__BongoClaim_Emotes_v2";
+        public const string NormalKey = "BongoClaim_NormalEnabled_v1";
+        public const string EmoteKey = "BongoClaim_EmoteEnabled_v1";
         private const string RelativeDll = "BongoCat_Data/Managed/Assembly-CSharp.dll";
 
         public static string GameAssembly(string root)
@@ -49,7 +52,11 @@ namespace BongoClaim
         private static AssemblyDefinition Read(string path)
         {
             var resolver = new DefaultAssemblyResolver();
-            resolver.AddSearchDirectory(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)));
+            var directory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path));
+            resolver.AddSearchDirectory(directory);
+            // Backups retain their original bytes, while Unity dependencies stay in Managed.
+            if (System.IO.Path.GetFileName(directory) == "backups" && System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(directory)) == ".bongo-claim")
+                resolver.AddSearchDirectory(System.IO.Path.GetDirectoryName(GameAssembly(System.IO.Path.GetDirectoryName(System.IO.Path.GetDirectoryName(directory)))));
             return AssemblyDefinition.ReadAssembly(path, new ReaderParameters { ReadSymbols = false, InMemory = true, AssemblyResolver = resolver });
         }
 
@@ -111,9 +118,19 @@ namespace BongoClaim
             shape.Owner = Field(candidates[0], "<>4__this", shop.FullName);
             if (!Calls(shape.Tick, shop.FullName, "OnChestReady") || !Calls(shape.CanBuy, "BongoCat.Pets", "CanSpendPets")) throw new InvalidOperationException("Unsupported game: readiness or affordability checks changed.");
             if (new[] { shape.Ready, shape.Tick }.Any(m => m.Body.ExceptionHandlers.Count != 0)) throw new InvalidOperationException("Unsupported game: timer exception layout changed.");
-            shape.Helper = shop.Methods.SingleOrDefault(m => m.Name == Marker);
+            var helpers = shop.Methods.Where(m => m.Name == Marker || m.Name == LegacyMarker).ToArray();
+            if (helpers.Length > 1) throw new InvalidOperationException("Conflicting BongoClaim versions were detected. Restore the original first.");
+            shape.Helper = helpers.SingleOrDefault();
+            if (shape.Helper != null && (shape.Helper.IsStatic || shape.Helper.Parameters.Count != 0 || shape.Helper.ReturnType.FullName != "System.Boolean" || !shape.Helper.HasBody)) throw new InvalidOperationException("An invalid BongoClaim helper was detected. Restore the original before continuing.");
             if (shape.Helper == null && (Calls(shape.Ready, item.FullName, "Buy") || Calls(shape.Tick, item.FullName, "Buy"))) throw new InvalidOperationException("Another auto-claim mod is already present. Use Steam Verify integrity to restore an original game DLL first.");
-            if (shape.Helper != null && (!Calls(shape.Ready, shop.FullName, Marker) || !Calls(shape.Tick, shop.FullName, Marker))) throw new InvalidOperationException("An incomplete BongoClaim patch was detected. Restore through this tool or Steam before continuing.");
+            if (shape.Helper != null && (!Calls(shape.Ready, shop.FullName, shape.Helper.Name) || !Calls(shape.Tick, shop.FullName, shape.Helper.Name))) throw new InvalidOperationException("An incomplete BongoClaim patch was detected. Restore through this tool or Steam before continuing.");
+            NativeControlsPatch.Validate(asm);
+            if (shape.Helper != null && shape.Helper.Name == Marker && !NativeControlsPatch.IsInstalled(asm)) throw new InvalidOperationException("The BongoClaim settings controls are incomplete. Restore the original before reinstalling.");
+            if (shape.Helper != null && shape.Helper.Name == Marker)
+            {
+                var option = shop.Fields.SingleOrDefault(f => f.Name == SettingsMarker);
+                if (option == null || !option.IsLiteral || !option.HasConstant || option.FieldType.FullName != "System.Boolean") throw new InvalidOperationException("The BongoClaim default setting is incomplete. Restore the original before reinstalling.");
+            }
             return shape;
         }
 
@@ -127,11 +144,12 @@ namespace BongoClaim
                 using (var asm = Read(path))
                 {
                     var shape = GetShape(asm);
-                    result.Supported = true;
                     result.Installed = shape.Helper != null;
-                    var setting = shape.Shop.Fields.SingleOrDefault(f => f.Name == SettingsMarker);
+                    result.RuntimeControls = result.Installed && shape.Helper.Name == Marker;
+                    var setting = shape.Shop.Fields.SingleOrDefault(f => f.Name == (result.RuntimeControls ? SettingsMarker : "__BongoClaim_Emotes_v1"));
                     result.Emotes = setting != null && setting.HasConstant && Convert.ToBoolean(setting.Constant);
-                    result.Message = result.Installed ? "Auto claim is installed (" + (result.Emotes ? "normal + emote chests" : "normal chests only") + ")." : "Compatible chest, timer and purchase signatures found. Ready to install.";
+                    result.Supported = true;
+                    result.Message = result.RuntimeControls ? "Installed. Change normal and emote auto claim in the game's Settings > General." : result.Installed ? "Older patch installed. Upgrade to add live normal and emote controls." : "Compatible chest, timer and settings controls found. Ready to install.";
                 }
             }
             catch (Exception ex) { result.Message = ex.Message; }
@@ -156,7 +174,12 @@ namespace BongoClaim
             s.Shop.Fields.Add(new FieldDefinition(SettingsMarker, FieldAttributes.Private | FieldAttributes.Static | FieldAttributes.Literal | FieldAttributes.HasDefault, asm.MainModule.TypeSystem.Boolean) { Constant = emotes });
             var il = helper.Body.GetILProcessor();
             var no = Instruction.Create(OpCodes.Ldc_I4_0);
-            if (!emotes) { il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, s.Emote)); il.Append(Instruction.Create(OpCodes.Brtrue, no)); }
+            var normal = Instruction.Create(OpCodes.Ldstr, NormalKey);
+            var enabled = Instruction.Create(OpCodes.Brfalse, no);
+            var getInt = NativeControlsPatch.GetIntReference(asm);
+            il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, s.Emote)); il.Append(Instruction.Create(OpCodes.Brfalse, normal));
+            il.Append(Instruction.Create(OpCodes.Ldstr, EmoteKey)); il.Append(Instruction.Create(emotes ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0)); il.Append(Instruction.Create(OpCodes.Call, getInt)); il.Append(Instruction.Create(OpCodes.Br, enabled));
+            il.Append(normal); il.Append(Instruction.Create(OpCodes.Ldc_I4_1)); il.Append(Instruction.Create(OpCodes.Call, getInt)); il.Append(enabled);
             il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, s.ReadyFlag)); il.Append(Instruction.Create(OpCodes.Brfalse, no));
             il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, s.Opening)); il.Append(Instruction.Create(OpCodes.Brtrue, no));
             il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, s.ItemField)); il.Append(Instruction.Create(OpCodes.Brfalse, no));
@@ -171,6 +194,7 @@ namespace BongoClaim
             var tickStart = s.Tick.Body.Instructions[0];
             var ownerExists = Instruction.Create(OpCodes.Call, helper);
             Prepend(s.Tick, new[] { Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldfld, s.Owner), Instruction.Create(OpCodes.Dup), Instruction.Create(OpCodes.Brtrue, ownerExists), Instruction.Create(OpCodes.Pop), Instruction.Create(OpCodes.Br, tickStart), ownerExists, Instruction.Create(OpCodes.Pop) });
+            NativeControlsPatch.Apply(asm, emotes);
             asm.MainModule.Mvid = Guid.NewGuid();
         }
 
@@ -191,7 +215,7 @@ namespace BongoClaim
                 }
             }
             var check = Inspect(output);
-            if (!check.Supported || !check.Installed || check.Emotes != emotes) throw new InvalidOperationException("Patched output did not pass read-back verification: " + check.Message);
+            if (!check.Supported || !check.Installed || !check.RuntimeControls || check.Emotes != emotes) throw new InvalidOperationException("Patched output did not pass read-back verification: " + check.Message);
         }
 
         public static void EnsureGameClosed(string root)
@@ -237,16 +261,19 @@ namespace BongoClaim
             var target = GameAssembly(root);
             var current = Inspect(target);
             if (!current.Supported) throw new InvalidOperationException(current.Message);
+            var originalHash = current.Hash;
+            string source = target;
             if (current.Installed)
             {
-                if (current.Emotes != emotes) throw new InvalidOperationException("Restore the original first to change which chest types are automated.");
                 var prior = LoadState(root);
                 if (prior == null || !String.Equals(prior.PatchedHash, current.Hash, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("A patched DLL has no matching backup record. Use Steam Verify integrity, then install again.");
-                if (!File.Exists(BackupPath(root, prior.OriginalHash)) || Hash(BackupPath(root, prior.OriginalHash)) != prior.OriginalHash) throw new InvalidOperationException("The original backup is missing or damaged. Use Steam Verify integrity.");
-                return "Already installed. Your original backup is unchanged.";
+                source = BackupPath(root, prior.OriginalHash);
+                if (!File.Exists(source) || Hash(source) != prior.OriginalHash) throw new InvalidOperationException("The original backup is missing or damaged. Use Steam Verify integrity.");
+                if (current.RuntimeControls) return "Already installed. Use Settings > General in Bongo Cat to change either chest toggle while playing.";
+                // Upgrade from the verified unmodified backup, never stack patches.
+                originalHash = prior.OriginalHash;
             }
             if (!File.Exists(System.IO.Path.Combine(root, "BongoCat.exe"))) throw new InvalidOperationException("Select the folder containing BongoCat.exe.");
-            var originalHash = current.Hash;
             var backup = BackupPath(root, originalHash);
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(backup));
             if (File.Exists(backup))
@@ -257,27 +284,29 @@ namespace BongoClaim
             var pending = target + ".bongoclaim-" + Guid.NewGuid().ToString("N") + ".tmp";
             var statePath = System.IO.Path.Combine(root, ".bongo-claim", "install.json");
             var stateTemp = statePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var rollback = target + ".rollback-" + Guid.NewGuid().ToString("N") + ".tmp";
             bool replaced = false;
+            bool committedOrRecovered = false;
             try
             {
-                PatchCopy(target, pending, emotes);
+                PatchCopy(source, pending, emotes);
                 var patchedHash = Hash(pending);
                 var state = new InstallState { OriginalHash = originalHash, PatchedHash = patchedHash, Emotes = emotes, InstalledUtc = DateTime.UtcNow.ToString("o") };
                 SaveState(stateTemp, state);
                 EnsureGameClosed(root);
-                if (Hash(target) != originalHash) throw new InvalidOperationException("The game updated during installation. Nothing was changed. Inspect and try again.");
-                File.Replace(pending, target, null);
+                if (Hash(target) != current.Hash) throw new InvalidOperationException("The game updated during installation. Nothing was changed. Inspect and try again.");
+                File.Replace(pending, target, rollback);
                 replaced = true;
                 if (File.Exists(statePath)) File.Replace(stateTemp, statePath, null); else File.Move(stateTemp, statePath);
-                return "Auto claim installed. Start Bongo Cat from Steam. Keep playing normally; eligible chests open automatically.";
+                committedOrRecovered = true;
+                return "Auto claim controls installed. Start Bongo Cat from Steam, then use Settings > General to turn normal or emote claims on or off.";
             }
-            catch
+            catch (Exception failure)
             {
                 if (replaced)
                 {
-                    var rollback = target + ".rollback-" + Guid.NewGuid().ToString("N");
-                    File.Copy(backup, rollback, false);
-                    File.Replace(rollback, target, null);
+                    try { File.Replace(rollback, target, null); committedOrRecovered = true; }
+                    catch (Exception recovery) { throw new IOException("Installation could not commit or restore the previous DLL. That DLL is retained at " + rollback + ". Close the game and recover it before continuing.", new AggregateException(failure, recovery)); }
                 }
                 throw;
             }
@@ -285,6 +314,7 @@ namespace BongoClaim
             {
                 if (File.Exists(pending)) File.Delete(pending);
                 if (File.Exists(stateTemp)) File.Delete(stateTemp);
+                if (committedOrRecovered && File.Exists(rollback)) File.Delete(rollback);
             }
         }
 

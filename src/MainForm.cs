@@ -16,15 +16,15 @@ namespace BongoClaim
         private readonly Color Ink = Color.FromArgb(20, 25, 31), PanelColor = Color.FromArgb(29, 36, 43), Mint = Color.FromArgb(162, 238, 190), Muted = Color.FromArgb(156, 171, 181);
         private TextBox folder;
         private Label status, fingerprint;
-        private CheckBox emotes;
         private Button inspect, install, restore, browse;
+        private bool isBusy;
 
         public MainForm()
         {
             Text = "BongoClaim · chest helper";
-            ClientSize = new Size(670, 610);
-            MinimumSize = new Size(670, 650);
-            MaximumSize = new Size(870, 650);
+            ClientSize = new Size(670, 685);
+            MinimumSize = new Size(670, 725);
+            MaximumSize = new Size(870, 725);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -36,7 +36,7 @@ namespace BongoClaim
             var mark = TextLabel("ฅ", 31, Mint); mark.SetBounds(28, 22, 55, 60); Controls.Add(mark);
             var brand = TextLabel("BONGO CLAIM", 18, Color.White); brand.Font = new Font("Segoe UI", 18, FontStyle.Bold); brand.SetBounds(91, 28, 390, 35); Controls.Add(brand);
             var subtitle = TextLabel("Your cat keeps playing. Your chests get claimed.", 10, Muted); subtitle.SetBounds(92, 66, 490, 24); Controls.Add(subtitle);
-            var badge = TextLabel("WINDOWS  /  v1.0", 8, Mint); badge.SetBounds(520, 34, 125, 22); Controls.Add(badge);
+            var badge = TextLabel("WINDOWS  /  v1.1", 8, Mint); badge.SetBounds(520, 34, 125, 22); Controls.Add(badge);
             var rule = new Panel { BackColor = PanelColor }; rule.SetBounds(30, 110, 610, 1); Controls.Add(rule);
             var heading = TextLabel("01   FIND YOUR GAME", 9, Muted); heading.SetBounds(30, 134, 400, 23); Controls.Add(heading);
             folder = new TextBox { BackColor = PanelColor, ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, AccessibleName = "Bongo Cat game folder" }; folder.SetBounds(30, 168, 493, 32); Controls.Add(folder);
@@ -46,15 +46,19 @@ namespace BongoClaim
             var checkHeading = TextLabel("COMPATIBILITY CHECK", 8, Mint); checkHeading.SetBounds(17, 14, 570, 20); card.Controls.Add(checkHeading);
             status = TextLabel("Checking your installed build…", 10, Color.White); status.SetBounds(17, 39, 572, 45); card.Controls.Add(status);
             fingerprint = TextLabel("", 8, Muted); fingerprint.SetBounds(17, 86, 572, 17); card.Controls.Add(fingerprint);
-            emotes = new CheckBox { Text = "Also claim emote chests (uses their normal in-game pets cost)", ForeColor = Muted, AutoSize = false, AccessibleName = "Also claim emote chests" }; emotes.SetBounds(30, 370, 610, 29); Controls.Add(emotes);
-            var note = TextLabel("Normal chests only by default. Eligibility and cooldowns stay unchanged.", 9, Muted); note.SetBounds(30, 406, 610, 22); Controls.Add(note);
-            inspect = MakeButton("Check build", false, delegate { CheckGame(); }); inspect.SetBounds(30, 447, 120, 44); Controls.Add(inspect);
-            install = MakeButton("Enable auto claim  →", true, delegate { RunChange(false); }); install.SetBounds(164, 447, 282, 44); Controls.Add(install);
-            restore = MakeButton("Restore original", false, delegate { RunChange(true); }); restore.SetBounds(460, 447, 180, 44); Controls.Add(restore);
-            var foot = TextLabel("Exit Bongo Cat before enabling or restoring. A verified original backup\nis kept in your game folder. Steam updates may require reapplying.", 9, Muted); foot.SetBounds(30, 512, 610, 43); Controls.Add(foot);
-            var github = new LinkLabel { Text = "Source & downloads ↗", LinkColor = Mint, ActiveLinkColor = Color.White, VisitedLinkColor = Mint, BackColor = Ink, Font = new Font("Segoe UI", 9), AutoSize = true }; github.SetBounds(30, 574, 230, 20); github.LinkClicked += delegate { Process.Start("https://github.com/NH4OH-35/bongo-claim"); }; Controls.Add(github);
-            var offline = TextLabel("LOCAL TOOL · NO LOGIN · NO KEY SIMULATION", 8, Muted); offline.SetBounds(342, 576, 310, 20); Controls.Add(offline);
+            var controlsHeading = TextLabel("02   CONTROL IT IN THE GAME", 9, Muted); controlsHeading.SetBounds(30, 377, 610, 23); Controls.Add(controlsHeading);
+            var controlsLocation = TextLabel("Settings > General", 12, Mint); controlsLocation.SetBounds(30, 408, 610, 27); Controls.Add(controlsLocation);
+            var normalRow = TextLabel("Normal chest auto-claim     On / Off", 10, Color.White); normalRow.SetBounds(30, 443, 610, 24); Controls.Add(normalRow);
+            var emoteRow = TextLabel("Emote chest auto-claim       On / Off", 10, Color.White); emoteRow.SetBounds(30, 471, 610, 24); Controls.Add(emoteRow);
+            var note = TextLabel("Both start on. With the game menu open: F7 normal / F9 emote.", 9, Muted); note.SetBounds(30, 506, 610, 22); Controls.Add(note);
+            inspect = MakeButton("Check build", false, delegate { CheckGame(); }); inspect.SetBounds(30, 545, 120, 44); Controls.Add(inspect);
+            install = MakeButton("Install auto claim  →", true, delegate { RunChange(false); }); install.SetBounds(164, 545, 282, 44); Controls.Add(install);
+            restore = MakeButton("Restore original", false, delegate { RunChange(true); }); restore.SetBounds(460, 545, 180, 44); Controls.Add(restore);
+            var foot = TextLabel("Exit Bongo Cat before installing or restoring. Claims use the normal pets\ncost and cooldown. The helper can be closed after installation.", 9, Muted); foot.SetBounds(30, 604, 610, 43); Controls.Add(foot);
+            var github = new LinkLabel { Text = "Source & downloads ↗", LinkColor = Mint, ActiveLinkColor = Color.White, VisitedLinkColor = Mint, BackColor = Ink, Font = new Font("Segoe UI", 9), AutoSize = true }; github.SetBounds(30, 655, 230, 20); github.LinkClicked += delegate { Process.Start("https://github.com/NH4OH-35/bongo-claim"); }; Controls.Add(github);
+            var offline = TextLabel("LOCAL TOOL · NO LOGIN · NO KEY SIMULATION", 8, Muted); offline.SetBounds(342, 657, 310, 20); Controls.Add(offline);
             Shown += delegate { folder.Text = FindGame(); CheckGame(); };
+            FormClosing += delegate(object sender, FormClosingEventArgs e) { if (isBusy) e.Cancel = true; };
         }
 
         private Label TextLabel(string text, float size, Color color) { return new Label { Text = text, ForeColor = color, Font = new Font("Segoe UI", size), AutoSize = false }; }
@@ -64,28 +68,30 @@ namespace BongoClaim
             result.FlatAppearance.BorderSize = 0; result.Click += click; return result;
         }
 
-        private void Busy(bool busy) { foreach (var c in new Control[] { folder, browse, inspect, install, restore, emotes }) c.Enabled = !busy; UseWaitCursor = busy; }
+        private void Busy(bool busy) { isBusy = busy; foreach (var c in new Control[] { folder, browse, inspect, install, restore }) c.Enabled = !busy; UseWaitCursor = busy; }
 
         private void CheckGame()
         {
+            if (isBusy) return;
             try
             {
                 var result = PatchEngine.Inspect(PatchEngine.GameAssembly(folder.Text));
                 status.Text = result.Message; status.ForeColor = result.Supported ? Color.White : Color.FromArgb(255, 195, 154);
                 fingerprint.Text = result.Hash == null ? "" : "BUILD FINGERPRINT  " + result.Hash.Substring(0, 16).ToUpperInvariant();
-                install.Enabled = result.Supported && !result.Installed;
+                install.Text = result.Installed ? (result.RuntimeControls ? "Controls installed" : "Upgrade controls  →") : "Install auto claim  →";
+                install.Enabled = result.Supported && (!result.Installed || !result.RuntimeControls);
                 restore.Enabled = File.Exists(Path.Combine(folder.Text, ".bongo-claim", "install.json"));
-                if (result.Installed) emotes.Checked = result.Emotes;
             }
             catch (Exception ex) { status.Text = ex.Message; status.ForeColor = Color.FromArgb(255, 195, 154); install.Enabled = false; restore.Enabled = false; }
         }
 
         private void RunChange(bool undo)
         {
-            string root = folder.Text; bool includeEmotes = emotes.Checked;
+            if (isBusy) return;
+            string root = folder.Text;
             Busy(true); status.Text = undo ? "Verifying backup and restoring the original…" : "Verifying your build, backing up and applying the patch…";
             var worker = new BackgroundWorker();
-            worker.DoWork += delegate(object sender, DoWorkEventArgs e) { e.Result = undo ? PatchEngine.Restore(root) : PatchEngine.Install(root, includeEmotes); };
+            worker.DoWork += delegate(object sender, DoWorkEventArgs e) { e.Result = undo ? PatchEngine.Restore(root) : PatchEngine.Install(root, true); };
             worker.RunWorkerCompleted += delegate(object sender, RunWorkerCompletedEventArgs e)
             {
                 Busy(false); CheckGame();

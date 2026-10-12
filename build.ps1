@@ -17,15 +17,15 @@ $compiler = Join-Path ([Environment]::GetFolderPath('Windows')) 'Microsoft.NET\F
 if (!(Test-Path -LiteralPath $compiler)) { throw '.NET Framework 4 compiler not found. Build on Windows with .NET Framework 4.8.' }
 $commonArgs = @('/nologo', '/optimize+', '/platform:anycpu', "/reference:$cecilDll", '/reference:System.Core.dll', '/reference:System.Runtime.Serialization.dll')
 Copy-Item -LiteralPath $cecilDll -Destination artifacts\Mono.Cecil.dll -Force
-& $compiler @commonArgs /target:winexe /out:artifacts\BongoClaim.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32manifest:src\app.manifest src\Program.cs src\PatchEngine.cs src\MainForm.cs
+& $compiler @commonArgs /target:winexe /out:artifacts\BongoClaim.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32manifest:src\app.manifest src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\MainForm.cs
 if ($LASTEXITCODE -ne 0) { throw 'Desktop compilation failed.' }
-& $compiler @commonArgs /target:exe /out:artifacts\BongoClaim.Cli.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll src\Program.cs src\PatchEngine.cs src\MainForm.cs
+& $compiler @commonArgs /target:exe /out:artifacts\BongoClaim.Cli.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\MainForm.cs
 if ($LASTEXITCODE -ne 0) { throw 'CLI compilation failed.' }
 if ($Test) {
     & $compiler /nologo /optimize+ /target:library /out:artifacts\Assembly-CSharp.dll tests\GameFixture.cs
     if ($LASTEXITCODE -ne 0) { throw 'Fixture compilation failed.' }
     Copy-Item -LiteralPath $cecilDll -Destination artifacts\Mono.Cecil.dll -Force
-    & $compiler @commonArgs /target:exe /out:artifacts\BongoClaim.Tests.exe src\PatchEngine.cs tests\EngineTests.cs
+    & $compiler @commonArgs /target:exe /out:artifacts\BongoClaim.Tests.exe src\PatchEngine.cs src\NativeControlsPatch.cs tests\EngineTests.cs
     if ($LASTEXITCODE -ne 0) { throw 'Tests compilation failed.' }
     & .\artifacts\BongoClaim.Tests.exe
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }

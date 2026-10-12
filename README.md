@@ -8,14 +8,18 @@
 
 ## Use it
 
-1. Download `BongoClaim-v1.0.0-windows.zip` from Releases and **extract the whole ZIP**.
+1. Download `BongoClaim-v1.1.0-windows.zip` from Releases and **extract the whole ZIP**.
 2. Exit Bongo Cat normally.
 3. Open `BongoClaim.exe`. Keep `Mono.Cecil.dll` beside it.
 4. The app finds your running game or Steam library. If needed, browse to the folder containing `BongoCat.exe`.
-5. Click **Check build**, then **Enable auto claim**.
+5. Click **Check build**, then **Install auto claim** (or **Upgrade controls** for v1.0).
 6. Start Bongo Cat from Steam. The patch works inside the game; this helper does not need to stay open.
 
-Normal chests are automated by default. **Emote chests are opt-in** and still use their normal in-game pets cost. To change that option after installing, restore the original first, then enable again with the new option.
+Normal and emote chests both start enabled. Open the game's **Settings → General** and use **Auto claim normal chests** or **Auto claim emote chests**. Each switch takes effect while playing and saves its own choice for the next launch. Turn normal off and leave emote on, or pause both; disabled chests retain the game's manual claim behavior. A request already sent to the server can still finish after switching off.
+
+For quick control, open the game menu with **Escape** or **M**, then press **F7** for normal or **F9** for emote. **Shift + F9** also works for emote if plain F9 is intercepted or missed. Shortcuts work only while the game is focused, its menu is open, and no text field is active. They update the same saved switches and checkmarks.
+
+Both chest types still use their normal in-game pets cost. Changes to these switches do not require reinstalling or keeping BongoClaim open. When upgrading v1.0, the tool builds the new patch from your verified original backup and keeps that same original for restoration.
 
 The patch does not generate keyboard presses, inflate your pets counter, shorten cooldowns, bypass affordability, or change server eligibility. It calls the game's existing `ShopItem.Buy()` when its normal ready flag and affordability check allow it. An eligible chest still needs enough earned pets.
 
@@ -27,7 +31,7 @@ BongoClaim instead:
 
 - Inspects the assembly actually installed on your computer.
 - Checks the expected chest, timer, affordability and purchase-lock structure.
-- Adds one small helper and hooks two existing methods.
+- Adds guarded claim logic and two matching native settings rows.
 - Backs up your exact original bytes before installing.
 - Verifies the patched assembly by reading it back.
 - Refuses unsupported layouts or an existing conflicting auto-claim mod.
@@ -57,13 +61,17 @@ Original Assembly-CSharp.dll SHA-256
 7566e8d9846cdb38eadcdb729cfcf676dc338cd738e99f664dc6ef3b79e87b83
 ```
 
-The current original assembly was successfully patched as a separate copy and read back. Static comparison found exactly **two changed existing method bodies**, one added helper method, and one added constant field. All other existing method bodies remained unchanged. This is build compatibility evidence, not a promise about future updates or server behavior.
+The current original assembly is inspected, patched and read back before installation. Only chest readiness, its timer and the settings initialization are hooked; purchase callbacks, prices and cooldowns are retained. This is build compatibility evidence, not a promise about future updates or server behavior.
 
-Seventeen executable tests use a source-owned simulated game assembly to cover normal claims, eligibility, affordability, pending requests, emote opt-in, retrying an already-visible chest, null references, duplicate prevention, install idempotence, corrupted backups, Steam updates, unsupported layouts and exact restoration.
+Thirty-three executable tests use a source-owned simulated game assembly to cover claims, independent live switches, saved preferences, native settings clicks and callback isolation, focused-menu keyboard controls, eligibility, affordability, pending requests, retrying an already-visible chest, null references, duplicate prevention, v1 upgrades, corrupted backups, Steam updates, unsupported layouts and exact restoration. No proprietary game files are needed to run those tests.
 
 **A live normal-chest smoke test passed on 12 October 2026.** After installing on build 25723683 and restarting through Steam, the normal ready-chest indicator disappeared and the normal 30-minute cooldown began without a manual claim click. The emote chest stayed ready in normal-only mode. The game's successful purchase callback starts that cooldown; its failed-request path instead retries after 60 seconds. No exceptions or runtime errors were found in the game log. The original backup matched its recorded SHA-256 exactly.
 
-This verifies the normal auto-claim flow on that installation. The awarded cosmetic's identity was not recorded, emote claiming was not live-tested, and future builds or server behavior remain outside this check. Please report your build ID, normal/emote mode, and error text if a claim fails.
+The earlier check verified normal claiming in v1.0; it did not record the cosmetic's identity. Future builds or server behavior remain outside that check. Please report your build ID, toggle settings, and error text if a claim fails.
+
+**A live emote-chest smoke test passed for v1.1 on 12 October 2026.** Upgrading the same installation from its verified original backup enabled both chest types. After restarting through Steam, the previously ready emote indicator disappeared and its normal 30-minute cooldown began without a manual claim click. No runtime errors were found in the game log. The cosmetic's identity was not recorded.
+
+Live F7 and Shift + F9 checks changed the normal and emote saved settings independently from on to off and back to on through the new native controls. Both were left enabled. Plain F9 was missed by the automation tool on this PC; Shift + F9 reached the same emote handler. Automated mouse clicks were blocked by the game's transparent window, so checkbox clicks were verified in the behavioral fixture and the actual scene hierarchy was inspected separately.
 
 ## Requirements and troubleshooting
 
@@ -103,13 +111,15 @@ For diagnostics and scripted use, `BongoClaim.Cli.exe` offers:
 .\BongoClaim.Cli.exe --patch-copy 'path\Assembly-CSharp.dll' "$env:TEMP\patched-copy.dll"
 ```
 
-`--emotes` opts in to emote chests during install or patch-copy. `--verbose` includes a diagnostic stack trace. `--patch-copy` refuses to overwrite the source or an existing output.
+Both chest types default to enabled. `--normal-only` makes the initial emote default off; a saved in-game toggle takes precedence. `--emotes` remains accepted for compatibility with v1.0. Change the switches in the game after installation. `--verbose` includes a diagnostic stack trace. `--patch-copy` refuses to overwrite the source or an existing output.
 
 ## How the patch works
 
-`PatchEngine.cs` adds a private helper to `BongoCat.Shop`. It checks the selected chest type, `ChestIsReady`, `_openingChest`, the shop-item reference and `CanBuy()`, then invokes the original `Buy()`. The game's own `StartBuy()` keeps its pets and pending-server checks intact.
+`PatchEngine.cs` adds a private helper to `BongoCat.Shop`. It reads the corresponding saved PlayerPrefs switch on each attempt, then checks `ChestIsReady`, `_openingChest`, the shop-item reference and `CanBuy()` before invoking the original `Buy()`. The game's own `StartBuy()` keeps its pets and pending-server checks intact.
 
 The helper runs at the beginning of `OnChestReady()` and the game's existing timer state machine. The timer hook allows a later retry even when a popup is already shown. The game's timer interval, failed-request cooldown and purchase callbacks are preserved.
+
+`NativeControlsPatch.cs` adds native settings controls with separate keys and callbacks. Their saved values are read directly by the claim helper, so toggling does not change the installed DLL or its backup fingerprint.
 
 No game or Steam assembly is shipped. Development inspection used [REA](https://github.com/morluto/rea) and [Mono.Cecil](https://github.com/jbevain/cecil). See [third-party notices](THIRD-PARTY-NOTICES.md).
 

@@ -3,7 +3,9 @@ using System.Collections;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Serialization.Json;
 using Mono.Cecil;
+using Mono.Cecil.Cil;
 
 namespace BongoClaim
 {
@@ -41,6 +43,59 @@ namespace BongoClaim
         {
             var pets = asm.GetType("BongoCat.Pets"); var instance = pets.GetField("Instance").GetValue(null); pets.GetField("Allowed").SetValue(instance, allowed);
         }
+        private static void SetOption(Assembly asm, string key, bool enabled)
+        {
+            asm.GetType("UnityEngine.PlayerPrefs").GetMethod("SetInt").Invoke(null, new object[] { key, enabled ? 1 : 0 });
+        }
+        private static int GetOption(Assembly asm, string key, int fallback)
+        {
+            return (int)asm.GetType("UnityEngine.PlayerPrefs").GetMethod("GetInt").Invoke(null, new object[] { key, fallback });
+        }
+        private static object Settings(Assembly asm)
+        {
+            return asm.GetType("BongoCat.SettingsFixture").GetMethod("Create").Invoke(null, null);
+        }
+        private static void Prepend(MethodDefinition method, params Instruction[] instructions)
+        {
+            var first = method.Body.Instructions[0]; var il = method.Body.GetILProcessor();
+            foreach (var instruction in instructions) il.InsertBefore(first, instruction);
+            method.Body.MaxStackSize = Math.Max(method.Body.MaxStackSize, 4);
+        }
+        // Reproduce the published v1 patch against our source-owned fixture so
+        // upgrade tests do not depend on shipping a game DLL or a legacy binary.
+        private static void WriteLegacyPatch(string output, bool emotes)
+        {
+            using (var asm = AssemblyDefinition.ReadAssembly(fixture))
+            {
+                var shop = asm.MainModule.Types.Single(t => t.FullName == "BongoCat.Shop");
+                var item = asm.MainModule.Types.Single(t => t.FullName == "BongoCat.ShopItem");
+                var helper = new MethodDefinition("__BongoClaim_TryClaim_v1", Mono.Cecil.MethodAttributes.Private | Mono.Cecil.MethodAttributes.HideBySig, asm.MainModule.TypeSystem.Boolean);
+                shop.Methods.Add(helper);
+                shop.Fields.Add(new FieldDefinition("__BongoClaim_Emotes_v1", Mono.Cecil.FieldAttributes.Private | Mono.Cecil.FieldAttributes.Static | Mono.Cecil.FieldAttributes.Literal | Mono.Cecil.FieldAttributes.HasDefault, asm.MainModule.TypeSystem.Boolean) { Constant = emotes });
+                var il = helper.Body.GetILProcessor(); var no = Instruction.Create(OpCodes.Ldc_I4_0);
+                Action<string, bool> guard = delegate(string fieldName, bool failWhenTrue) {
+                    il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, shop.Fields.Single(f => f.Name == fieldName))); il.Append(Instruction.Create(failWhenTrue ? OpCodes.Brtrue : OpCodes.Brfalse, no));
+                };
+                if (!emotes) guard("_isEmoteShop", true);
+                guard("ChestIsReady", false); guard("_openingChest", true); guard("_shopItem", false);
+                var itemField = shop.Fields.Single(f => f.Name == "_shopItem");
+                il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, itemField)); il.Append(Instruction.Create(OpCodes.Callvirt, item.Methods.Single(m => m.Name == "CanBuy"))); il.Append(Instruction.Create(OpCodes.Brfalse, no));
+                il.Append(Instruction.Create(OpCodes.Ldarg_0)); il.Append(Instruction.Create(OpCodes.Ldfld, itemField)); il.Append(Instruction.Create(OpCodes.Callvirt, item.Methods.Single(m => m.Name == "Buy")));
+                il.Append(Instruction.Create(OpCodes.Ldc_I4_1)); il.Append(Instruction.Create(OpCodes.Ret)); il.Append(no); il.Append(Instruction.Create(OpCodes.Ret)); helper.Body.MaxStackSize = 2;
+                var ready = shop.Methods.Single(m => m.Name == "OnChestReady"); var readyStart = ready.Body.Instructions[0];
+                Prepend(ready, Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Call, helper), Instruction.Create(OpCodes.Brfalse, readyStart), Instruction.Create(OpCodes.Ret));
+                var timer = shop.NestedTypes.Single(t => t.Name.StartsWith("<TimerUpdate>")); var tick = timer.Methods.Single(m => m.Name == "MoveNext"); var tickStart = tick.Body.Instructions[0]; var callHelper = Instruction.Create(OpCodes.Call, helper);
+                Prepend(tick, Instruction.Create(OpCodes.Ldarg_0), Instruction.Create(OpCodes.Ldfld, timer.Fields.Single(f => f.Name == "<>4__this")), Instruction.Create(OpCodes.Dup), Instruction.Create(OpCodes.Brtrue, callHelper), Instruction.Create(OpCodes.Pop), Instruction.Create(OpCodes.Br, tickStart), callHelper, Instruction.Create(OpCodes.Pop));
+                asm.MainModule.Mvid = Guid.NewGuid(); asm.Write(output);
+            }
+        }
+        private static void SaveLegacyState(string root, string originalHash, string patchedHash, bool emotes)
+        {
+            var directory = Path.Combine(root, ".bongo-claim"); Directory.CreateDirectory(Path.Combine(directory, "backups"));
+            File.Copy(fixture, Path.Combine(directory, "backups", originalHash + ".dll"));
+            using (var stream = File.Create(Path.Combine(directory, "install.json")))
+                new DataContractJsonSerializer(typeof(InstallState)).WriteObject(stream, new InstallState { Version = 1, OriginalHash = originalHash, PatchedHash = patchedHash, Emotes = emotes, InstalledUtc = DateTime.UtcNow.ToString("o") });
+        }
 
         public static int Main()
         {
@@ -60,6 +115,111 @@ namespace BongoClaim
                 });
                 Test("normal-only mode leaves emote purchases manual", delegate { var asm = Patched(false); var shop = Shop(asm, true, false, true); Call(shop, "OnChestReady"); Assert(Purchases(shop) == 0, "Emote claimed by default"); });
                 Test("emote opt-in uses the same guarded purchase path", delegate { var asm = Patched(true); var shop = Shop(asm, true, false, true); Call(shop, "OnChestReady"); Assert(Purchases(shop) == 1, "Opt-in did not claim"); });
+                Test("normal toggle applies to readiness and re-enables a visible ready chest live", delegate {
+                    var asm = Patched(true); SetOption(asm, PatchEngine.NormalKey, false);
+                    var shop = Shop(asm, true, false, false); Call(shop, "OnChestReady"); Assert(Purchases(shop) == 0, "Disabled normal chest claimed");
+                    Assert((int)shop.GetType().GetField("Popups").GetValue(shop) == 1, "Manual ready popup was suppressed while disabled");
+                    var timer = (IEnumerator)Call(shop, "TimerUpdate"); timer.MoveNext(); Assert(Purchases(shop) == 0, "Timer ignored disable toggle");
+                    SetOption(asm, PatchEngine.NormalKey, true); timer.MoveNext(); timer.MoveNext(); Assert(Purchases(shop) == 1, "Live enable did not claim exactly once");
+                });
+                Test("emote toggle is independent of normal-chest auto claim", delegate {
+                    var asm = Patched(true); SetOption(asm, PatchEngine.EmoteKey, false);
+                    var emote = Shop(asm, true, false, true); Call(emote, "OnChestReady"); Assert(Purchases(emote) == 0, "Disabled emote chest claimed");
+                    var normal = Shop(asm, true, false, false); Call(normal, "OnChestReady"); Assert(Purchases(normal) == 1, "Emote disable also disabled normal claim");
+                    SetOption(asm, PatchEngine.NormalKey, false); SetOption(asm, PatchEngine.EmoteKey, true);
+                    var secondNormal = Shop(asm, true, false, false); Call(secondNormal, "OnChestReady"); Assert(Purchases(secondNormal) == 0, "Normal disable ignored");
+                    var secondEmote = Shop(asm, true, false, true); Call(secondEmote, "OnChestReady"); Assert(Purchases(secondEmote) == 1, "Normal disable also disabled emote claim");
+                });
+                Test("saved settings override install defaults without rewriting them", delegate {
+                    var asm = Patched(false); SetOption(asm, PatchEngine.NormalKey, false); SetOption(asm, PatchEngine.EmoteKey, true);
+                    var normal = Shop(asm, true, false, false); var emote = Shop(asm, true, false, true);
+                    Call(normal, "OnChestReady"); Call(emote, "OnChestReady");
+                    Assert(Purchases(normal) == 0 && Purchases(emote) == 1, "Installed defaults overrode saved settings");
+                    Assert(GetOption(asm, PatchEngine.NormalKey, -1) == 0 && GetOption(asm, PatchEngine.EmoteKey, -1) == 1, "Claim helper rewrote saved preferences");
+                });
+                Test("both toggles off retain manual readiness for both chest types", delegate {
+                    var asm = Patched(true); SetOption(asm, PatchEngine.NormalKey, false); SetOption(asm, PatchEngine.EmoteKey, false);
+                    foreach (var emote in new[] { false, true }) { var shop = Shop(asm, true, false, emote); Call(shop, "OnChestReady"); var timer = (IEnumerator)Call(shop, "TimerUpdate"); timer.MoveNext(); Assert(Purchases(shop) == 0, "Disabled chest claimed"); Assert((int)shop.GetType().GetField("Popups").GetValue(shop) == 1, "Manual readiness changed"); }
+                });
+                Test("enabling after an unaffordable ready chest keeps timer retries", delegate {
+                    var asm = Patched(true); SetOption(asm, PatchEngine.NormalKey, false); Allow(asm, false);
+                    var shop = Shop(asm, true, false, false); Call(shop, "OnChestReady"); var timer = (IEnumerator)Call(shop, "TimerUpdate"); timer.MoveNext();
+                    SetOption(asm, PatchEngine.NormalKey, true); timer.MoveNext(); Assert(Purchases(shop) == 0, "Live enable bypassed affordability");
+                    Allow(asm, true); timer.MoveNext(); timer.MoveNext(); Assert(Purchases(shop) == 1, "Ready chest lost retries after settings change");
+                });
+                Test("native General rows initialise both defaults and avoid duplicate rows", delegate {
+                    var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                    Assert((int)Call(settings, "GeneralRowCount") == 3, "Expected Autostart plus exactly two auto-claim rows");
+                    Assert(((string)Call(settings, "RowLabel", 1)).IndexOf("normal", StringComparison.OrdinalIgnoreCase) >= 0, "Normal row label missing");
+                    Assert(((string)Call(settings, "RowLabel", 2)).IndexOf("emote", StringComparison.OrdinalIgnoreCase) >= 0, "Emote row label missing");
+                    Assert((bool)Call(settings, "RowToggleActive", 1) && (bool)Call(settings, "RowToggleActive", 2), "Defaults not active when settings first opens");
+                    Assert(!String.IsNullOrWhiteSpace((string)Call(settings, "RowTooltip", 1)) && !String.IsNullOrWhiteSpace((string)Call(settings, "RowTooltip", 2)), "Control explanations missing");
+                    Call(settings, "Initialize"); Assert((int)Call(settings, "GeneralRowCount") == 3, "Repeated initialization duplicated controls");
+                });
+                Test("native settings use saved values and clicks change each claim mode live", delegate {
+                    var asm = Patched(true); SetOption(asm, PatchEngine.NormalKey, false); SetOption(asm, PatchEngine.EmoteKey, true);
+                    var settings = Settings(asm); Call(settings, "Initialize");
+                    Assert(!(bool)Call(settings, "RowToggleActive", 1) && (bool)Call(settings, "RowToggleActive", 2), "Native controls ignored saved settings");
+                    Call(settings, "ClickRow", 1); Call(settings, "ClickRow", 2);
+                    Assert(GetOption(asm, PatchEngine.NormalKey, -1) == 1 && GetOption(asm, PatchEngine.EmoteKey, -1) == 0, "Clicked controls saved wrong keys or values");
+                    Assert((int)asm.GetType("UnityEngine.PlayerPrefs").GetField("Saves").GetValue(null) == 2, "Control clicks did not persist settings once each");
+                    var normal = Shop(asm, true, false, false); var emote = Shop(asm, true, false, true); Call(normal, "OnChestReady"); Call(emote, "OnChestReady");
+                    Assert(Purchases(normal) == 1 && Purchases(emote) == 0, "Clicks did not immediately change runtime behavior");
+                });
+                Test("cloned native rows do not alter the original setting or invoke its callbacks", delegate {
+                    var asm = Patched(true); asm.GetType("UnityEngine.PlayerPrefs").GetMethod("SetInt").Invoke(null, new object[] { "show_chest_popup", 1 });
+                    var settings = Settings(asm); Call(settings, "Initialize"); Call(settings, "ClickRow", 1); Call(settings, "ClickRow", 2);
+                    Assert(GetOption(asm, "show_chest_popup", -1) == 1, "Auto-claim controls wrote an original game preference");
+                    Assert((int)settings.GetType().GetField("SourceEvents").GetValue(settings) == 0 && (int)settings.GetType().GetField("SourceButtonClicks").GetValue(settings) == 0, "Cloned row invoked source callbacks");
+                    Assert((string)Call(settings, "OriginalLabel") == "Chest popup" && (bool)Call(settings, "OriginalLocalizersEnabled"), "Source row content or localization was changed");
+                    Assert(!(bool)Call(settings, "RowLocalizersEnabled", 1) && !(bool)Call(settings, "RowLocalizersEnabled", 2), "New label could be overwritten by source localization");
+                    var manager = settings.GetType().GetField("Manager").GetValue(settings); Assert((int)manager.GetType().GetField("OriginalAwakeCalls").GetValue(manager) == 1, "Original SettingsManager startup was changed");
+                });
+                Test("native clone failure clears its temporary Awake guard and permits retry", delegate {
+                    var asm = Patched(true); var settings = Settings(asm);
+                    asm.GetType("UnityEngine.Object").GetField("FailNextInstantiate").SetValue(null, true);
+                    bool rejected = false;
+                    try { Call(settings, "Initialize"); }
+                    catch (TargetInvocationException ex) { rejected = ex.InnerException != null && ex.InnerException.Message.IndexOf("fixture clone failure", StringComparison.Ordinal) >= 0; }
+                    Assert(rejected, "Fixture cloning failure did not propagate");
+                    var guard = asm.GetType("BongoCat.PlayerPrefsToggle").GetField("__BongoClaim_CloneInProgress_v1", BindingFlags.Static | BindingFlags.NonPublic);
+                    Assert(guard != null && !(bool)guard.GetValue(null), "Failed clone left all preference Awake methods disabled");
+                    Call(settings, "Initialize"); Assert((int)Call(settings, "GeneralRowCount") == 3, "Native initialization could not retry after failed clone");
+                });
+                Test("focused-menu hotkeys independently toggle native rows and persist their states", delegate {
+                    var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                    Call(settings, "Frame", true, false);
+                    Assert(GetOption(asm, PatchEngine.NormalKey, -1) == 0 && !(bool)Call(settings, "RowToggleActive", 1), "F7 did not toggle normal claim and its checkmark");
+                    Assert((bool)Call(settings, "RowToggleActive", 2) && GetOption(asm, PatchEngine.EmoteKey, -1) == -1, "F7 changed the emote setting");
+                    Call(settings, "Frame", false, true);
+                    Assert(GetOption(asm, PatchEngine.EmoteKey, -1) == 0 && !(bool)Call(settings, "RowToggleActive", 2), "F9 did not toggle emote claim and its checkmark");
+                    Call(settings, "Frame", true, true);
+                    Assert(GetOption(asm, PatchEngine.NormalKey, -1) == 1 && GetOption(asm, PatchEngine.EmoteKey, -1) == 1, "Both hotkeys did not restore both settings independently");
+                    Assert((bool)Call(settings, "RowToggleActive", 1) && (bool)Call(settings, "RowToggleActive", 2), "Hotkey state and native row state disagree");
+                    Assert((int)asm.GetType("UnityEngine.PlayerPrefs").GetField("Saves").GetValue(null) == 4, "Hotkeys did not persist exactly one update per toggle");
+                    Assert((int)Call(settings, "OriginalUpdateCount") == 3, "Hotkeys changed original per-frame game behavior");
+                });
+                Test("hotkeys are ignored outside a focused open menu or while typing", delegate {
+                    var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                    foreach (var context in new[] { new[] { false, true, false }, new[] { true, false, false }, new[] { true, true, true } })
+                    {
+                        Call(settings, "SetContext", context[0], context[1], context[2]); Call(settings, "Frame", true, true);
+                        Assert((bool)Call(settings, "RowToggleActive", 1) && (bool)Call(settings, "RowToggleActive", 2), "Blocked hotkey context changed native controls");
+                    }
+                    Assert(GetOption(asm, PatchEngine.NormalKey, -1) == -1 && GetOption(asm, PatchEngine.EmoteKey, -1) == -1, "Blocked context saved preferences");
+                    Assert((int)asm.GetType("UnityEngine.PlayerPrefs").GetField("Saves").GetValue(null) == 0, "Blocked hotkeys wrote settings");
+                    Call(settings, "SetContext", true, true, false); Call(settings, "Frame", true, false);
+                    Assert(GetOption(asm, PatchEngine.NormalKey, -1) == 0 && (bool)Call(settings, "RowToggleActive", 2), "Hotkeys did not resume when context became eligible");
+                    Assert((int)Call(settings, "OriginalUpdateCount") == 4, "Blocked hotkeys suppressed the game's own Update");
+                });
+                Test("hotkeys tolerate missing menu and controls without altering defaults", delegate {
+                    var asm = Patched(true); var settings = Settings(asm);
+                    Call(settings, "Frame", true, true);
+                    Assert(GetOption(asm, PatchEngine.NormalKey, -1) == -1 && GetOption(asm, PatchEngine.EmoteKey, -1) == -1, "Missing controls wrote settings");
+                    Call(settings, "Initialize"); Call(settings, "ClearMenu"); Call(settings, "Frame", true, true);
+                    Assert((bool)Call(settings, "RowToggleActive", 1) && (bool)Call(settings, "RowToggleActive", 2), "Missing menu changed settings");
+                    Assert((int)Call(settings, "OriginalUpdateCount") == 2, "Missing UI context interrupted original game Update");
+                });
                 Test("existing server-wait guard still blocks a second request", delegate { var asm = Patched(false); var shop = Shop(asm, true, false, false); var item = Call(shop, "GetItem"); Call(item, "SetWaiting", true); Call(shop, "OnChestReady"); Assert(Purchases(shop) == 0, "Server guard bypassed"); });
                 Test("timer retries when a chest is ready and popup already shown", delegate {
                     var asm = Patched(false); var shop = Shop(asm, true, false, false); shop.GetType().GetField("Shown").SetValue(shop, true);
@@ -76,6 +236,18 @@ namespace BongoClaim
                     Assert(PatchEngine.Install(root, false).StartsWith("Already"), "Not idempotent"); Assert(PatchEngine.Hash(target) == changed, "Installed twice");
                     PatchEngine.Restore(root); Assert(PatchEngine.Hash(target) == original, "Restore not exact"); Assert(PatchEngine.Restore(root).Contains("already restored"), "Restore not idempotent");
                 });
+                Test("failed install-state commit rolls the game DLL back byte-for-byte", delegate {
+                    var root = NewGame(); var target = PatchEngine.GameAssembly(root); var original = PatchEngine.Hash(target);
+                    Directory.CreateDirectory(Path.Combine(root, ".bongo-claim", "install.json"));
+                    bool rejected = false;
+                    try { PatchEngine.Install(root, true); }
+                    catch (IOException) { rejected = true; }
+                    catch (UnauthorizedAccessException) { rejected = true; }
+                    Assert(rejected, "State commit unexpectedly succeeded");
+                    Assert(PatchEngine.Hash(target) == original, "Failed state commit left a patched DLL installed");
+                    var check = PatchEngine.Inspect(target); Assert(check.Supported && !check.Installed, "Rollback did not return compatible original");
+                    Assert(PatchEngine.Hash(Path.Combine(root, ".bongo-claim", "backups", original + ".dll")) == original, "Rollback discarded or damaged original backup");
+                });
                 Test("restore refuses a changed game build", delegate { var root = NewGame(); PatchEngine.Install(root, false); File.AppendAllText(PatchEngine.GameAssembly(root), "steam-update"); Throws(delegate { PatchEngine.Restore(root); }, "changed after installation"); });
                 Test("restore refuses a corrupted backup", delegate {
                     var root = NewGame(); PatchEngine.Install(root, false); var state = PatchEngine.LoadState(root); File.AppendAllText(Path.Combine(root, ".bongo-claim", "backups", state.OriginalHash + ".dll"), "corruption"); Throws(delegate { PatchEngine.Restore(root); }, "damaged");
@@ -86,10 +258,34 @@ namespace BongoClaim
                     var updatedHash = PatchEngine.Hash(PatchEngine.GameAssembly(root)); PatchEngine.Install(root, false); Assert(PatchEngine.LoadState(root).OriginalHash == updatedHash, "Update backed up wrong");
                     Assert(File.Exists(Path.Combine(root, ".bongo-claim", "backups", old.OriginalHash + ".dll")), "Old backup lost"); PatchEngine.Restore(root); Assert(PatchEngine.Hash(PatchEngine.GameAssembly(root)) == updatedHash, "Restored old version");
                 });
+                Test("v1 upgrade uses verified original backup and restores it byte-for-byte", delegate {
+                    var root = NewGame(); var target = PatchEngine.GameAssembly(root); var original = PatchEngine.Hash(target);
+                    WriteLegacyPatch(target, false); var legacyHash = PatchEngine.Hash(target); SaveLegacyState(root, original, legacyHash, false);
+                    Assert(PatchEngine.Inspect(target).Installed, "Legacy patch was not recognised"); Assert(!PatchEngine.Inspect(target).RuntimeControls, "Legacy patch falsely reported live controls");
+                    PatchEngine.Install(root, true); var upgraded = PatchEngine.Inspect(target);
+                    Assert(upgraded.Installed && upgraded.RuntimeControls && upgraded.Emotes, "Upgrade did not add both live controls");
+                    Assert(PatchEngine.LoadState(root).OriginalHash == original, "Upgrade replaced original backup record with patched bytes");
+                    Assert(PatchEngine.Hash(Path.Combine(root, ".bongo-claim", "backups", original + ".dll")) == original, "Upgrade changed original backup");
+                    Assert(PatchEngine.Install(root, true).StartsWith("Already"), "Upgraded install is not idempotent");
+                    PatchEngine.Restore(root); Assert(PatchEngine.Hash(target) == original, "Upgrade restore is not byte-for-byte");
+                });
+                Test("v1 upgrade rejects missing or damaged original backup without changing game", delegate {
+                    var root = NewGame(); var target = PatchEngine.GameAssembly(root); var original = PatchEngine.Hash(target);
+                    WriteLegacyPatch(target, false); var legacyHash = PatchEngine.Hash(target); SaveLegacyState(root, original, legacyHash, false);
+                    var backup = Path.Combine(root, ".bongo-claim", "backups", original + ".dll"); File.AppendAllText(backup, "corruption");
+                    Throws(delegate { PatchEngine.Install(root, true); }, "damaged"); Assert(PatchEngine.Hash(target) == legacyHash, "Rejected upgrade modified game");
+                    File.Delete(backup); Throws(delegate { PatchEngine.Install(root, true); }, "missing"); Assert(PatchEngine.Hash(target) == legacyHash, "Missing backup upgrade modified game");
+                });
                 Test("unknown shape is rejected before install changes anything", delegate {
                     var root = NewGame(); var target = PatchEngine.GameAssembly(root);
                     using (var asm = AssemblyDefinition.ReadAssembly(fixture)) { asm.MainModule.Types.Single(t => t.FullName == "BongoCat.Shop").Methods.Single(m => m.Name == "OnChestReady").Name = "RenamedByUpdate"; asm.Write(target); }
                     var hash = PatchEngine.Hash(target); Throws(delegate { PatchEngine.Install(root, false); }, "Unsupported"); Assert(PatchEngine.Hash(target) == hash, "Unknown build modified");
+                });
+                Test("unfamiliar native settings layout is rejected before changing the game", delegate {
+                    var root = NewGame(); var target = PatchEngine.GameAssembly(root);
+                    using (var asm = AssemblyDefinition.ReadAssembly(fixture)) { asm.MainModule.Types.Single(t => t.FullName == "BongoCat.PlayerPrefsToggle").Fields.Single(f => f.Name == "_toggle").Name = "UpdatedToggleReference"; asm.Write(target); }
+                    var hash = PatchEngine.Hash(target); Assert(!PatchEngine.Inspect(target).Supported, "Unknown settings layout marked compatible");
+                    Throws(delegate { PatchEngine.Install(root, true); }, "Unsupported game settings"); Assert(PatchEngine.Hash(target) == hash, "Unknown settings layout modified game");
                 });
                 Test("rejects another auto-claim mod rather than stacking patches", delegate {
                     var input = NewFile("othermod");
@@ -101,7 +297,12 @@ namespace BongoClaim
                 });
                 Console.WriteLine("All " + passed + " tests passed."); return 0;
             }
-            catch (Exception ex) { Console.Error.WriteLine("FAIL " + ex); return 1; }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("FAIL " + ex.GetType().FullName + ": " + ex.Message);
+                while (ex.InnerException != null) { ex = ex.InnerException; Console.Error.WriteLine("CAUSE " + ex.GetType().FullName + ": " + ex.Message); }
+                return 1;
+            }
             finally { Directory.Delete(temp, true); }
         }
     }
