@@ -1,12 +1,20 @@
 # BongoClaim ฅ
 
-**A downloadable Windows chest helper for Bongo Cat.** Applies a small, reversible patch to your installed game instead of replacing it with an outdated game DLL.
+**Auto-claim normal and emote chests in Bongo Cat, with simple in-game switches.** Install the Windows helper once, then launch Bongo Cat normally through Steam.
 
 [Download the portable ZIP](https://github.com/NH4OH-35/bongo-claim/releases/latest) · [Report a problem](https://github.com/NH4OH-35/bongo-claim/issues)
 
-![BongoClaim desktop app](docs/desktop.png)
+![Bongo Cat Settings > General showing normal and emote auto-claim enabled](docs/game-settings.png)
 
-## Use it
+## Everyday use
+
+**Already installed? Just start Bongo Cat normally from Steam.** Auto-claim runs inside the game; you can leave `BongoClaim.exe` closed. Keep Bongo Cat and Steam running. When an enabled chest is ready and you have enough earned pets, it claims automatically at the game's normal cost and cooldown.
+
+Open the game menu with **Escape** or **M**, click the **gear**, then choose **General**. Check **Auto claim normal chests** or **Auto claim emote chests** to enable that type; uncheck it to pause. Each choice takes effect while playing and saves for the next launch. Both start enabled. A request already sent to the server can still finish after switching off.
+
+For quick control with the game menu open, press **F7** for normal or **F9** for emote. **Shift + F9** also works for emote if plain F9 is intercepted or missed. Shortcuts work only while the game is focused and no text field is active. They update the same saved switches and checkmarks.
+
+## First-time installation
 
 1. Download `BongoClaim-v1.1.0-windows.zip` from Releases and **extract the whole ZIP**.
 2. Exit Bongo Cat normally.
@@ -15,9 +23,7 @@
 5. Click **Check build**, then **Install auto claim** (or **Upgrade controls** for v1.0).
 6. Start Bongo Cat from Steam. The patch works inside the game; this helper does not need to stay open.
 
-Normal and emote chests both start enabled. Open the game's **Settings → General** and use **Auto claim normal chests** or **Auto claim emote chests**. Each switch takes effect while playing and saves its own choice for the next launch. Turn normal off and leave emote on, or pause both; disabled chests retain the game's manual claim behavior. A request already sent to the server can still finish after switching off.
-
-For quick control, open the game menu with **Escape** or **M**, then press **F7** for normal or **F9** for emote. **Shift + F9** also works for emote if plain F9 is intercepted or missed. Shortcuts work only while the game is focused, its menu is open, and no text field is active. They update the same saved switches and checkmarks.
+![BongoClaim desktop installer and restore controls](docs/desktop.png)
 
 Both chest types still use their normal in-game pets cost. Changes to these switches do not require reinstalling or keeping BongoClaim open. When upgrading v1.0, the tool builds the new patch from your verified original backup and keeps that same original for restoration.
 
