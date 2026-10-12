@@ -14,6 +14,7 @@ namespace UnityEngine
         public virtual string name { get; set; }
         public static implicit operator bool(Object value) { return value != null; }
         public static T FindObjectOfType<T>() where T : Object { return scene.Find(o => o is T) as T; }
+        public static T[] FindObjectsOfType<T>(bool inactive) where T : Object { return scene.FindAll(o => o is T).ConvertAll(o => (T)o).ToArray(); }
         public static T Instantiate<T>(T source, Transform parent) where T : Object
         {
             if (FailNextInstantiate) { FailNextInstantiate = false; throw new InvalidOperationException("source-owned fixture clone failure"); }
@@ -91,13 +92,19 @@ namespace UnityEngine
         public void SetSiblingIndex(int index) { if (parent == null) return; parent.Children.Remove(this); parent.Children.Insert(Math.Max(0, Math.Min(index, parent.Children.Count)), this); }
     }
     public sealed class WaitForSecondsRealtime { public WaitForSecondsRealtime(float seconds) { } }
-    public enum KeyCode { F7 = 288, F9 = 290 }
+    public enum KeyCode { F6 = 287, F7 = 288, F9 = 290 }
+    public static class Time { public static float unscaledTime { get; set; } }
     public static class Application { static Application() { isFocused = true; } public static bool isFocused { get; set; } }
     public static class Input
     {
         private static readonly HashSet<KeyCode> pressed = new HashSet<KeyCode>();
+        private static readonly HashSet<KeyCode> held = new HashSet<KeyCode>(), released = new HashSet<KeyCode>();
         public static bool GetKeyDown(KeyCode key) { return pressed.Remove(key); }
-        public static void BeginFrame(bool normalKey, bool emoteKey) { pressed.Clear(); if (normalKey) pressed.Add(KeyCode.F7); if (emoteKey) pressed.Add(KeyCode.F9); }
+        public static bool GetKey(KeyCode key) { return held.Contains(key); }
+        public static bool GetKeyUp(KeyCode key) { return released.Remove(key); }
+        public static void BeginFrame(bool normalKey, bool emoteKey) { Keys(); if (normalKey) pressed.Add(KeyCode.F7); if (emoteKey) pressed.Add(KeyCode.F9); }
+        public static void Keys(params int[] keys) { pressed.Clear(); held.Clear(); released.Clear(); foreach (int key in keys) { pressed.Add((KeyCode)key); held.Add((KeyCode)key); } Time.unscaledTime += 1; }
+        public static void Release(int key) { held.Remove((KeyCode)key); released.Add((KeyCode)key); }
     }
     public static class PlayerPrefs
     {
@@ -112,6 +119,25 @@ namespace UnityEngine
 }
 
 namespace Helper { public static class InputFieldCache { public static bool FocusingInputField { get; set; } } }
+namespace Heathen.SteamworksIntegration {
+    public struct ItemData { public long Quantity; public long GetTotalQuantity() { return Quantity; } }
+    namespace API { public static class StatsAndAchievements { public static class Client { public static int Stores; public static bool StoreStats() { Stores++; return true; } } } }
+}
+namespace SteamTools {
+    public static class Interface { static Interface() { IsReady = true; } public static bool IsReady { get; set; } }
+    public static class Game { public static class Inventory {
+        public static Heathen.SteamworksIntegration.ItemData Chest_Token = new Heathen.SteamworksIntegration.ItemData { Quantity = 2 };
+        public static Heathen.SteamworksIntegration.ItemData Emote_Chest_Token = new Heathen.SteamworksIntegration.ItemData { Quantity = 2 };
+        public static Heathen.SteamworksIntegration.ItemData Achievement_Token = new Heathen.SteamworksIntegration.ItemData { Quantity = 1 };
+        public static Heathen.SteamworksIntegration.ItemData ManualToken = new Heathen.SteamworksIntegration.ItemData { Quantity = 1 };
+    } }
+}
+namespace BongoCat.SteamJsonParser { public class SteamExchange { public bool Allowed = true; public bool CanExchange() { return Allowed; } } }
+namespace Steam { public class ChestExchanger : UnityEngine.MonoBehaviour {
+    private static bool IsExchanging;
+    private BongoCat.SteamJsonParser.SteamExchange _exchange = new BongoCat.SteamJsonParser.SteamExchange();
+    public void SetAllowed(bool value) { _exchange.Allowed = value; }
+} }
 
 namespace UnityEngine.Events
 {
@@ -135,9 +161,10 @@ namespace UnityEngine.UI
     public class Button : UnityEngine.Behaviour
     {
         public class ButtonClickedEvent : UnityEngine.Events.UnityEvent { }
-        public Button() { onClick = new ButtonClickedEvent(); }
+        public Button() { onClick = new ButtonClickedEvent(); interactable = true; }
         public ButtonClickedEvent onClick { get; set; }
-        public void Click() { onClick.Invoke(); }
+        public bool interactable { get; set; }
+        public void Click() { if (enabled && interactable) onClick.Invoke(); }
     }
 }
 namespace UnityEngine.Localization.Components { public class LocalizeStringEvent : UnityEngine.Behaviour { } }
@@ -220,7 +247,7 @@ namespace BongoCat
         {
             var row = Child(parent, label + "Row"); row.AddComponent<UnityEngine.UI.Button>(); var content = Child(row, "Content");
             var labelObject = Child(content, "Label"); labelObject.AddComponent<TMPro.TMP_Text>().text = label; labelObject.AddComponent<UnityEngine.Localization.Components.LocalizeStringEvent>();
-            var button = Child(content, "Button");
+            var button = Child(content, "Toggle");
             var checkmark = Child(button, "Checkmark"); checkmark.AddComponent<global::ToggleGameObject>(); checkmark.AddComponent<UiThemes.ToggleImageColor>();
             var tooltip = Child(row, "HoverTooltip"); var text = Child(tooltip, "Text"); text.AddComponent<TMPro.TMP_Text>().text = "Original tooltip"; text.AddComponent<UnityEngine.Localization.Components.LocalizeStringEvent>();
             Child(row, "DisableOverlay");
@@ -229,26 +256,42 @@ namespace BongoCat
         public void Initialize() { Manager.Initialize(); }
         public void SetContext(bool gameFocused, bool menuOpen, bool textInputFocused) { UnityEngine.Application.isFocused = gameFocused; Menu.SetActive(menuOpen); Helper.InputFieldCache.FocusingInputField = textInputFocused; }
         public void Frame(bool normalKey, bool emoteKey) { UnityEngine.Input.BeginFrame(normalKey, emoteKey); Cat.Tick(); }
+        public void KeyFrame(int key) { UnityEngine.Input.Keys(key); Cat.Tick(); }
+        public void ShiftKeyFrame(int key) { UnityEngine.Input.Keys(key, 304); Cat.Tick(); }
+        public void QuickShiftKeyFrame(int key) { UnityEngine.Input.Keys(key, 304); UnityEngine.Input.Release(304); Cat.Tick(); }
+        public void Refresh() { UnityEngine.Input.Keys(); Cat.Tick(); }
         public void ClearMenu() { Cat.SetMenu(null); }
         public int OriginalUpdateCount() { return Cat.OriginalUpdateCalls; }
         public int GeneralRowCount() { return General.transform.Children.Count; }
         public string RowLabel(int index) { return General.transform.Children[index].Find("Content/Label").gameObject.GetComponent<TMPro.TMP_Text>().text; }
         public string RowTooltip(int index) { return General.transform.Children[index].Find("HoverTooltip/Text").gameObject.GetComponent<TMPro.TMP_Text>().text; }
         public bool RowToggleActive(int index) { return General.transform.Children[index].gameObject.GetComponentInChildren<global::ToggleGameObject>(true).Active; }
+        public bool RowCheckboxVisible(int index) { return General.transform.Children[index].Find("Content/Toggle").gameObject.activeSelf; }
+        public string RowName(int index) { return General.transform.Children[index].gameObject.name; }
+        public int FindRow(string name) { return General.transform.Children.FindIndex(row => row.gameObject.name == name); }
         public bool RowLocalizersEnabled(int index) { foreach (var localizer in General.transform.Children[index].gameObject.GetComponentsInChildren<UnityEngine.Localization.Components.LocalizeStringEvent>(true)) if (localizer.enabled) return true; return false; }
         public void ClickRow(int index) { General.transform.Children[index].gameObject.GetComponentInChildren<UnityEngine.UI.Button>(true).Click(); }
         public string OriginalLabel() { return Visuals.transform.Children[0].Find("Content/Label").gameObject.GetComponent<TMPro.TMP_Text>().text; }
         public bool OriginalLocalizersEnabled() { return Visuals.transform.Children[0].gameObject.GetComponentInChildren<UnityEngine.Localization.Components.LocalizeStringEvent>(true).enabled; }
     }
-    public sealed class Pets
+    public sealed class Pets : UnityEngine.MonoBehaviour
     {
         public static Pets Instance = new Pets();
-        public int Balance = 10000;
+        private int _currentGained = 10000, _totalSpent;
+        private bool _init = true;
+        public int Lifetime = 10000;
+        public int Balance { get { return Current; } set { _currentGained = value + _totalSpent; } }
+        private int Current { get { return Math.Max(0, _currentGained - _totalSpent); } }
+        public int TotalSpent { get { return _totalSpent; } }
+        public int StatUpdates;
+        private void UpdateStats() { StatUpdates++; }
+        public void ConfigureStats(int gained, int spent, bool init) { _currentGained = gained; _totalSpent = spent; _init = init; }
         public bool Allowed = true;
         public bool CanSpendPets(int price) { return Allowed && Balance >= price; }
+        public bool TrySpendPets(int price) { if (!_init || !CanSpendPets(price)) return false; _totalSpent += price; UpdateStats(); return true; }
     }
 
-    public sealed class Shop
+    public sealed class Shop : UnityEngine.MonoBehaviour
     {
         public bool ChestIsReady;
         private bool _openingChest;
@@ -257,13 +300,15 @@ namespace BongoCat
         public bool Shown;
         public int Popups;
         public int UnrelatedFeature = 42;
+        public int StockRefreshTimeLeft = 1800;
+        public bool Emote { get { return _isEmoteShop; } }
         public Shop() { _shopItem = new ShopItem(this); }
         public void Configure(bool ready, bool opening, bool emote) { ChestIsReady = ready; _openingChest = opening; _isEmoteShop = emote; }
         public ShopItem GetItem() { return _shopItem; }
         public void ClearItem() { _shopItem = null; }
         public void OnChestReady() { Shown = true; Popups++; }
         public void SetLoadingVisuals() { _openingChest = true; }
-        public void FinishPurchase(bool success) { _openingChest = false; if (success) ChestIsReady = false; }
+        public void FinishPurchase(bool success) { _openingChest = false; if (success) ChestIsReady = false; StockRefreshTimeLeft = success ? 1800 : 60; }
         public IEnumerator TimerUpdate()
         {
             while (true)
@@ -274,23 +319,29 @@ namespace BongoCat
         }
     }
 
-    public sealed class ShopItem
+    public sealed class ShopItem : UnityEngine.MonoBehaviour
     {
         private bool _waitingForServer;
         private readonly Shop _shop;
+        private Steam.ChestExchanger _chestExchanger = new Steam.ChestExchanger();
+        private bool charge;
         public int Purchases;
         public ShopItem(Shop shop) { _shop = shop; }
         public bool CanBuy() { return Pets.Instance.CanSpendPets(1000); }
         public void Buy() { StartBuy(true); }
+        public void BuyAsGift() { StartBuy(false); }
+        public bool TrySpendForGift() { return Pets.Instance.TrySpendPets(1000); }
         private void StartBuy(bool chargePets)
         {
             if (chargePets && !Pets.Instance.CanSpendPets(1000)) return;
             if (_waitingForServer) return;
             _waitingForServer = true;
+            charge = chargePets;
             _shop.SetLoadingVisuals();
             Purchases++;
         }
         public void SetWaiting(bool waiting) { _waitingForServer = waiting; }
-        public void Complete(bool success) { _waitingForServer = false; _shop.FinishPurchase(success); }
+        public void Complete(bool success) { _waitingForServer = false; if (success) { if (charge) Pets.Instance.TrySpendPets(1000); if (_shop.Emote) SteamTools.Game.Inventory.Emote_Chest_Token.Quantity--; else SteamTools.Game.Inventory.Chest_Token.Quantity--; } _shop.FinishPurchase(success); }
+        public void SetExchangeAllowed(bool allowed) { _chestExchanger.SetAllowed(allowed); }
     }
 }

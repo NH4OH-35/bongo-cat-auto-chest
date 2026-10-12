@@ -36,7 +36,7 @@ namespace BongoClaim
             var mark = TextLabel("ฅ", 31, Mint); mark.SetBounds(28, 22, 55, 60); Controls.Add(mark);
             var brand = TextLabel("BONGO CLAIM", 18, Color.White); brand.Font = new Font("Segoe UI", 18, FontStyle.Bold); brand.SetBounds(91, 28, 390, 35); Controls.Add(brand);
             var subtitle = TextLabel("Your cat keeps playing. Your chests get claimed.", 10, Muted); subtitle.SetBounds(92, 66, 490, 24); Controls.Add(subtitle);
-            var badge = TextLabel("WINDOWS  /  v1.1", 8, Mint); badge.SetBounds(520, 34, 125, 22); Controls.Add(badge);
+            var badge = TextLabel("WINDOWS  /  v1.2", 8, Mint); badge.SetBounds(520, 34, 125, 22); Controls.Add(badge);
             var rule = new Panel { BackColor = PanelColor }; rule.SetBounds(30, 110, 610, 1); Controls.Add(rule);
             var heading = TextLabel("01   FIND YOUR GAME", 9, Muted); heading.SetBounds(30, 134, 400, 23); Controls.Add(heading);
             folder = new TextBox { BackColor = PanelColor, ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, AccessibleName = "Bongo Cat game folder" }; folder.SetBounds(30, 168, 493, 32); Controls.Add(folder);
@@ -48,13 +48,13 @@ namespace BongoClaim
             fingerprint = TextLabel("", 8, Muted); fingerprint.SetBounds(17, 86, 572, 17); card.Controls.Add(fingerprint);
             var controlsHeading = TextLabel("02   CONTROL IT IN THE GAME", 9, Muted); controlsHeading.SetBounds(30, 377, 610, 23); Controls.Add(controlsHeading);
             var controlsLocation = TextLabel("Settings > General", 12, Mint); controlsLocation.SetBounds(30, 408, 610, 27); Controls.Add(controlsLocation);
-            var normalRow = TextLabel("Normal chest auto-claim     On / Off", 10, Color.White); normalRow.SetBounds(30, 443, 610, 24); Controls.Add(normalRow);
-            var emoteRow = TextLabel("Emote chest auto-claim       On / Off", 10, Color.White); emoteRow.SetBounds(30, 471, 610, 24); Controls.Add(emoteRow);
-            var note = TextLabel("Both start on. With the game menu open: F7 normal / F9 emote.", 9, Muted); note.SetBounds(30, 506, 610, 22); Controls.Add(note);
+            var normalRow = TextLabel("Normal / emote auto claim · Stored tokens and claim buttons", 10, Color.White); normalRow.SetBounds(30, 443, 610, 24); Controls.Add(normalRow);
+            var emoteRow = TextLabel("Keep pets when claiming · Edit pet score", 10, Color.White); emoteRow.SetBounds(30, 471, 610, 24); Controls.Add(emoteRow);
+            var note = TextLabel("Menu shortcuts: F10 edit score / F7 normal / F9 emote.", 9, Muted); note.SetBounds(30, 506, 610, 22); Controls.Add(note);
             inspect = MakeButton("Check build", false, delegate { CheckGame(); }); inspect.SetBounds(30, 545, 120, 44); Controls.Add(inspect);
             install = MakeButton("Install auto claim  →", true, delegate { RunChange(false); }); install.SetBounds(164, 545, 282, 44); Controls.Add(install);
             restore = MakeButton("Restore original", false, delegate { RunChange(true); }); restore.SetBounds(460, 545, 180, 44); Controls.Add(restore);
-            var foot = TextLabel("Exit Bongo Cat before installing or restoring. Claims use the normal pets\ncost and cooldown. The helper can be closed after installation.", 9, Muted); foot.SetBounds(30, 604, 610, 43); Controls.Add(foot);
+            var foot = TextLabel("Exit Bongo Cat before installing or restoring. Claims consume real owned\ntokens. The helper can be closed after installation.", 9, Muted); foot.SetBounds(30, 604, 610, 43); Controls.Add(foot);
             var github = new LinkLabel { Text = "Source & downloads ↗", LinkColor = Mint, ActiveLinkColor = Color.White, VisitedLinkColor = Mint, BackColor = Ink, Font = new Font("Segoe UI", 9), AutoSize = true }; github.SetBounds(30, 655, 230, 20); github.LinkClicked += delegate { Process.Start("https://github.com/NH4OH-35/bongo-claim"); }; Controls.Add(github);
             var offline = TextLabel("LOCAL TOOL · NO LOGIN · NO KEY SIMULATION", 8, Muted); offline.SetBounds(342, 657, 310, 20); Controls.Add(offline);
             Shown += delegate { folder.Text = FindGame(); CheckGame(); };
@@ -78,8 +78,8 @@ namespace BongoClaim
                 var result = PatchEngine.Inspect(PatchEngine.GameAssembly(folder.Text));
                 status.Text = result.Message; status.ForeColor = result.Supported ? Color.White : Color.FromArgb(255, 195, 154);
                 fingerprint.Text = result.Hash == null ? "" : "BUILD FINGERPRINT  " + result.Hash.Substring(0, 16).ToUpperInvariant();
-                install.Text = result.Installed ? (result.RuntimeControls ? "Controls installed" : "Upgrade controls  →") : "Install auto claim  →";
-                install.Enabled = result.Supported && (!result.Installed || !result.RuntimeControls);
+                install.Text = result.Installed ? (result.OwnedTokenControls ? "Controls installed" : "Upgrade controls  →") : "Install auto claim  →";
+                install.Enabled = result.Supported && (!result.Installed || !result.OwnedTokenControls);
                 restore.Enabled = File.Exists(Path.Combine(folder.Text, ".bongo-claim", "install.json"));
             }
             catch (Exception ex) { status.Text = ex.Message; status.ForeColor = Color.FromArgb(255, 195, 154); install.Enabled = false; restore.Enabled = false; }

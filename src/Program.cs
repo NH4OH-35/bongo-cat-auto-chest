@@ -45,11 +45,12 @@ namespace BongoClaim
                             Console.WriteLine(PatchEngine.Restore(args[1]));
                             return 0;
                         default:
-                            Console.WriteLine("BongoClaim 1.1.0 — run without arguments for the desktop app.");
+                            Console.WriteLine("BongoClaim 1.2.0 — run without arguments for the desktop app.");
                             Console.WriteLine("Commands: --inspect, --patch-copy, --install, --restore. Both chest types start enabled.");
                             Console.WriteLine("Optional: --normal-only starts emote claims disabled; --emotes is accepted for compatibility.");
-                            Console.WriteLine("After installation, change either toggle live in Bongo Cat Settings > General.");
+                            Console.WriteLine("After installation, use Bongo Cat Settings > General for saved toggles, owned tokens and pet controls.");
                             Console.WriteLine("Keyboard: open the game menu, then F7 for normal or F9 for emote. Choices are saved.");
+                            Console.WriteLine("F10 edits available pets: type digits, Enter saves, Escape cancels. Keep pets starts off.");
                             return args[0] == "--help" ? 0 : 2;
                     }
                 }

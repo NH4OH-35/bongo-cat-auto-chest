@@ -16,8 +16,10 @@ namespace BongoClaim
         private const string CloneGuardName = "__BongoClaim_CloneInProgress_v1";
         private const string NormalControlName = "__BongoClaim_NormalControl_v1";
         private const string EmoteControlName = "__BongoClaim_EmoteControl_v1";
+        private const string KeepControlName = "__BongoClaim_KeepPetsControl_v1";
         private const string ToggleKeysName = "__BongoClaim_ToggleKeys_v1";
         private const string ControlKeysName = "__BongoClaim_ControlKeys_v1";
+        private const string ActionRowName = "__BongoClaim_CreateActionRow_v1";
 
         private sealed class Shape
         {
@@ -209,6 +211,29 @@ namespace BongoClaim
             catch (InvalidOperationException) { return false; }
         }
 
+        public static MethodReference GetActionRowReference(AssemblyDefinition asm)
+        {
+            var s = GetShape(asm);
+            var method = s.Toggle.Methods.SingleOrDefault(candidate => candidate.Name == ActionRowName && candidate.IsStatic && candidate.HasBody
+                && candidate.ReturnType.FullName == "UnityEngine.GameObject" && candidate.Parameters.Select(parameter => parameter.ParameterType.FullName).SequenceEqual(new[] {
+                    s.Toggle.FullName, "UnityEngine.Transform", "System.String", "System.String", "System.String", "UnityEngine.Events.UnityAction", "System.Int32" }));
+            if (method == null) throw Unsupported("the native action row helper is missing or changed");
+            return method;
+        }
+
+        public static bool IsExtendedInstalled(AssemblyDefinition asm)
+        {
+            if (!IsInstalled(asm)) return false;
+            try
+            {
+                GetActionRowReference(asm);
+                var controls = GetShape(asm).Settings.Methods.Single(method => method.Name == ControlsName);
+                return controls.Body.Instructions.Count(instruction => instruction.OpCode == OpCodes.Ldstr && (string)instruction.Operand == PatchEngine.KeepPetsKey) == 1
+                    && GetShape(asm).Toggle.Fields.Count(field => field.Name == KeepControlName && field.IsStatic) == 1;
+            }
+            catch (InvalidOperationException) { return false; }
+        }
+
         public static void Apply(AssemblyDefinition asm, bool emotes)
         {
             Validate(asm);
@@ -244,12 +269,14 @@ namespace BongoClaim
             var setActive = Call(go, "SetActive", m.TypeSystem.Void, true, m.TypeSystem.Boolean);
             var setEnabled = Call(behavior, "set_enabled", m.TypeSystem.Void, true, m.TypeSystem.Boolean);
             var newBoolEvent = Call(s.Event.FieldType, ".ctor", m.TypeSystem.Void, true);
+            var compareKey = Call(m.TypeSystem.String, "op_Equality", m.TypeSystem.Boolean, false, m.TypeSystem.String, m.TypeSystem.String);
 
             var guard = new FieldDefinition(CloneGuardName, FieldAttributes.Private | FieldAttributes.Static, m.TypeSystem.Boolean);
             s.Toggle.Fields.Add(guard);
             var normalControl = new FieldDefinition(NormalControlName, FieldAttributes.Private | FieldAttributes.Static, s.Toggle);
             var emoteControl = new FieldDefinition(EmoteControlName, FieldAttributes.Private | FieldAttributes.Static, s.Toggle);
-            s.Toggle.Fields.Add(normalControl); s.Toggle.Fields.Add(emoteControl);
+            var keepControl = new FieldDefinition(KeepControlName, FieldAttributes.Private | FieldAttributes.Static, s.Toggle);
+            s.Toggle.Fields.Add(normalControl); s.Toggle.Fields.Add(emoteControl); s.Toggle.Fields.Add(keepControl);
             var awakeIL = s.ToggleAwake.Body.GetILProcessor();
             var originalAwake = s.ToggleAwake.Body.Instructions[0];
             awakeIL.InsertBefore(originalAwake, Instruction.Create(OpCodes.Ldsfld, guard));
@@ -287,26 +314,37 @@ namespace BongoClaim
             il.Emit(OpCodes.Ldloc, index); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, index);
             il.Append(testLoop); il.Emit(OpCodes.Ldloc, localizers); il.Emit(OpCodes.Ldlen); il.Emit(OpCodes.Conv_I4); il.Emit(OpCodes.Blt, loop);
             il.Emit(OpCodes.Ldarg, configure.Parameters[3]); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldstr, "Content/Label"); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Callvirt, getText); il.Emit(OpCodes.Ldarg_3); il.Emit(OpCodes.Callvirt, setText);
-            il.Emit(OpCodes.Ldarg, configure.Parameters[3]); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldstr, "HoverTooltip/Text"); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Callvirt, getText); il.Emit(OpCodes.Ldstr, "Automatically claim when ready at the usual pets cost. While the menu is open and Bongo Cat has focus: F7 toggles normal chests; F9 toggles emote chests."); il.Emit(OpCodes.Callvirt, setText);
+            il.Emit(OpCodes.Ldarg, configure.Parameters[3]); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldstr, "HoverTooltip/Text"); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Callvirt, getText);
+            var autoClaimTooltip = Instruction.Create(OpCodes.Ldstr, "Automatically claim when ready. While the menu is open and Bongo Cat has focus: F7 toggles normal chests; F9 toggles emote chests.");
+            var tooltipReady = Instruction.Create(OpCodes.Callvirt, setText);
+            il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldstr, PatchEngine.KeepPetsKey); il.Emit(OpCodes.Call, compareKey); il.Emit(OpCodes.Brfalse, autoClaimTooltip);
+            il.Emit(OpCodes.Ldstr, "Claim normal and emote chests without subtracting pets. Owned chest tokens are still consumed. F5 toggles this while the game menu is open."); il.Emit(OpCodes.Br, tooltipReady);
+            il.Append(autoClaimTooltip); il.Append(tooltipReady);
             il.Emit(OpCodes.Ldarg, configure.Parameters[3]); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldstr, "DisableOverlay"); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Callvirt, getGameObject); il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Callvirt, setActive);
             il.Emit(OpCodes.Newobj, Call(clicked, ".ctor", m.TypeSystem.Void, true)); il.Emit(OpCodes.Stloc, clickEvent);
             il.Emit(OpCodes.Ldloc, clickEvent); il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldftn, s.ToggleClick); il.Emit(OpCodes.Newobj, Call(unityAction, ".ctor", m.TypeSystem.Void, true, m.TypeSystem.Object, m.TypeSystem.IntPtr)); il.Emit(OpCodes.Callvirt, Call(unityEvent, "AddListener", m.TypeSystem.Void, true, unityAction));
             il.Emit(OpCodes.Ldarg, configure.Parameters[3]); il.Emit(OpCodes.Callvirt, getButton); il.Emit(OpCodes.Ldloc, clickEvent); il.Emit(OpCodes.Callvirt, Call(button, "set_onClick", m.TypeSystem.Void, true, clicked));
             il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Call, s.SetUI);
-            var compareKey = Call(m.TypeSystem.String, "op_Equality", m.TypeSystem.Boolean, false, m.TypeSystem.String, m.TypeSystem.String);
             var checkEmoteKey = Instruction.Create(OpCodes.Ldarg_1);
+            var checkKeepKey = Instruction.Create(OpCodes.Ldarg_1);
             var configured = Instruction.Create(OpCodes.Ret);
             il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Ldstr, PatchEngine.NormalKey); il.Emit(OpCodes.Call, compareKey); il.Emit(OpCodes.Brfalse, checkEmoteKey);
             il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Stsfld, normalControl); il.Emit(OpCodes.Br, configured);
-            il.Append(checkEmoteKey); il.Emit(OpCodes.Ldstr, PatchEngine.EmoteKey); il.Emit(OpCodes.Call, compareKey); il.Emit(OpCodes.Brfalse, configured);
-            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Stsfld, emoteControl); il.Append(configured);
+            il.Append(checkEmoteKey); il.Emit(OpCodes.Ldstr, PatchEngine.EmoteKey); il.Emit(OpCodes.Call, compareKey); il.Emit(OpCodes.Brfalse, checkKeepKey);
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Stsfld, emoteControl); il.Emit(OpCodes.Br, configured);
+            il.Append(checkKeepKey); il.Emit(OpCodes.Ldstr, PatchEngine.KeepPetsKey); il.Emit(OpCodes.Call, compareKey); il.Emit(OpCodes.Brfalse, configured);
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Stsfld, keepControl); il.Append(configured);
 
             var toggleKeys = AddMethod(s.Toggle, ToggleKeysName, true, m.TypeSystem.Void);
             toggleKeys.Attributes = MethodAttributes.Assembly | MethodAttributes.Static | MethodAttributes.HideBySig;
             il = toggleKeys.Body.GetILProcessor();
+            var checkNormalShortcut = Instruction.Create(OpCodes.Ldc_I4, 288);
             var checkEmoteShortcut = Instruction.Create(OpCodes.Ldc_I4, 290);
             var shortcutEnd = Instruction.Create(OpCodes.Ret);
-            il.Emit(OpCodes.Ldc_I4, 288); il.Emit(OpCodes.Call, getKey); il.Emit(OpCodes.Brfalse, checkEmoteShortcut);
+            il.Emit(OpCodes.Ldc_I4, 286); il.Emit(OpCodes.Call, getKey); il.Emit(OpCodes.Brfalse, checkNormalShortcut);
+            il.Emit(OpCodes.Ldsfld, keepControl); il.Emit(OpCodes.Call, implicitBool); il.Emit(OpCodes.Brfalse, checkNormalShortcut);
+            il.Emit(OpCodes.Ldsfld, keepControl); il.Emit(OpCodes.Callvirt, s.ToggleClick);
+            il.Append(checkNormalShortcut); il.Emit(OpCodes.Call, getKey); il.Emit(OpCodes.Brfalse, checkEmoteShortcut);
             il.Emit(OpCodes.Ldsfld, normalControl); il.Emit(OpCodes.Call, implicitBool); il.Emit(OpCodes.Brfalse, checkEmoteShortcut);
             il.Emit(OpCodes.Ldsfld, normalControl); il.Emit(OpCodes.Callvirt, s.ToggleClick);
             il.Append(checkEmoteShortcut); il.Emit(OpCodes.Call, getKey); il.Emit(OpCodes.Brfalse, shortcutEnd);
@@ -342,6 +380,36 @@ namespace BongoClaim
             il.Emit(OpCodes.Ldloc, row); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldarg, create.Parameters[5]); il.Emit(OpCodes.Callvirt, Call(transform, "SetSiblingIndex", m.TypeSystem.Void, true, m.TypeSystem.Int32));
             il.Emit(OpCodes.Ldloc, row); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Callvirt, setActive); il.Emit(OpCodes.Ret);
 
+            // Action rows share the native theme, label and hover tooltip without
+            // retaining the source preference button's listeners or checkbox.
+            var createAction = AddMethod(s.Toggle, ActionRowName, true, go, s.Toggle, transform, m.TypeSystem.String, m.TypeSystem.String, m.TypeSystem.String, unityAction, m.TypeSystem.Int32);
+            createAction.Attributes = MethodAttributes.Assembly | MethodAttributes.Static | MethodAttributes.HideBySig;
+            var actionRow = new VariableDefinition(go);
+            var actionLocalizers = new VariableDefinition(new ArrayType(localize));
+            var actionIndex = new VariableDefinition(m.TypeSystem.Int32);
+            var actionClickEvent = new VariableDefinition(clicked);
+            createAction.Body.Variables.Add(actionRow); createAction.Body.Variables.Add(actionLocalizers); createAction.Body.Variables.Add(actionIndex); createAction.Body.Variables.Add(actionClickEvent);
+            il = createAction.Body.GetILProcessor();
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldfld, s.Check); EmitRow(il, getTransform, getParent, getGameObject); il.Emit(OpCodes.Ldarg_1); il.Emit(OpCodes.Call, Instantiate(m, go, obj, transform)); il.Emit(OpCodes.Stloc, actionRow);
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Ldarg_2); il.Emit(OpCodes.Callvirt, Call(obj, "set_name", m.TypeSystem.Void, true, m.TypeSystem.String));
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Callvirt, getLocalizers); il.Emit(OpCodes.Stloc, actionLocalizers);
+            il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Stloc, actionIndex);
+            var actionLoopTest = Instruction.Create(OpCodes.Ldloc, actionIndex);
+            var actionLoop = Instruction.Create(OpCodes.Ldloc, actionLocalizers);
+            il.Emit(OpCodes.Br, actionLoopTest); il.Append(actionLoop);
+            il.Emit(OpCodes.Ldloc, actionIndex); il.Emit(OpCodes.Ldelem_Ref); il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Callvirt, setEnabled);
+            il.Emit(OpCodes.Ldloc, actionIndex); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, actionIndex);
+            il.Append(actionLoopTest); il.Emit(OpCodes.Ldloc, actionLocalizers); il.Emit(OpCodes.Ldlen); il.Emit(OpCodes.Conv_I4); il.Emit(OpCodes.Blt, actionLoop);
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldstr, "Content/Label"); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Callvirt, getText); il.Emit(OpCodes.Ldarg_3); il.Emit(OpCodes.Callvirt, setText);
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldstr, "HoverTooltip/Text"); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Callvirt, getText); il.Emit(OpCodes.Ldarg, createAction.Parameters[4]); il.Emit(OpCodes.Callvirt, setText);
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Callvirt, getCheck); il.Emit(OpCodes.Call, getTransform); il.Emit(OpCodes.Callvirt, getParent); il.Emit(OpCodes.Callvirt, getGameObject); il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Callvirt, setActive);
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldstr, "DisableOverlay"); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Callvirt, getGameObject); il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Callvirt, setActive);
+            il.Emit(OpCodes.Newobj, Call(clicked, ".ctor", m.TypeSystem.Void, true)); il.Emit(OpCodes.Stloc, actionClickEvent);
+            il.Emit(OpCodes.Ldloc, actionClickEvent); il.Emit(OpCodes.Ldarg, createAction.Parameters[5]); il.Emit(OpCodes.Callvirt, Call(unityEvent, "AddListener", m.TypeSystem.Void, true, unityAction));
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Callvirt, getButton); il.Emit(OpCodes.Ldloc, actionClickEvent); il.Emit(OpCodes.Callvirt, Call(button, "set_onClick", m.TypeSystem.Void, true, clicked));
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Ldarg, createAction.Parameters[6]); il.Emit(OpCodes.Callvirt, Call(transform, "SetSiblingIndex", m.TypeSystem.Void, true, m.TypeSystem.Int32));
+            il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Callvirt, setActive); il.Emit(OpCodes.Ldloc, actionRow); il.Emit(OpCodes.Ret);
+
             var controls = AddMethod(s.Settings, ControlsName, false, m.TypeSystem.Void);
             var autoStart = new VariableDefinition(s.AutoStart); var anchor = new VariableDefinition(go); var destination = new VariableDefinition(transform); var position = new VariableDefinition(m.TypeSystem.Int32);
             controls.Body.Variables.Add(autoStart); controls.Body.Variables.Add(anchor); controls.Body.Variables.Add(destination); controls.Body.Variables.Add(position);
@@ -354,7 +422,8 @@ namespace BongoClaim
             il.Emit(OpCodes.Ldloc, destination); il.Emit(OpCodes.Ldstr, PatchEngine.NormalKey); il.Emit(OpCodes.Callvirt, find); il.Emit(OpCodes.Call, implicitBool); il.Emit(OpCodes.Brtrue, end);
             il.Emit(OpCodes.Ldloc, anchor); il.Emit(OpCodes.Callvirt, getObjectTransform); il.Emit(OpCodes.Callvirt, Call(transform, "GetSiblingIndex", m.TypeSystem.Int32, true)); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Add); il.Emit(OpCodes.Stloc, position);
             il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldfld, s.Source); il.Emit(OpCodes.Ldloc, destination); il.Emit(OpCodes.Ldstr, PatchEngine.NormalKey); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Ldstr, "Auto claim normal chests"); il.Emit(OpCodes.Ldloc, position); il.Emit(OpCodes.Call, create);
-            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldfld, s.Source); il.Emit(OpCodes.Ldloc, destination); il.Emit(OpCodes.Ldstr, PatchEngine.EmoteKey); il.Emit(emotes ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); il.Emit(OpCodes.Ldstr, "Auto claim emote chests"); il.Emit(OpCodes.Ldloc, position); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Add); il.Emit(OpCodes.Call, create); il.Append(end);
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldfld, s.Source); il.Emit(OpCodes.Ldloc, destination); il.Emit(OpCodes.Ldstr, PatchEngine.EmoteKey); il.Emit(emotes ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); il.Emit(OpCodes.Ldstr, "Auto claim emote chests"); il.Emit(OpCodes.Ldloc, position); il.Emit(OpCodes.Ldc_I4_1); il.Emit(OpCodes.Add); il.Emit(OpCodes.Call, create);
+            il.Emit(OpCodes.Ldarg_0); il.Emit(OpCodes.Ldfld, s.Source); il.Emit(OpCodes.Ldloc, destination); il.Emit(OpCodes.Ldstr, PatchEngine.KeepPetsKey); il.Emit(OpCodes.Ldc_I4_0); il.Emit(OpCodes.Ldstr, "Keep pets when claiming"); il.Emit(OpCodes.Ldloc, position); il.Emit(OpCodes.Ldc_I4_2); il.Emit(OpCodes.Add); il.Emit(OpCodes.Call, create); il.Append(end);
             // Insert before the original return, leaving all initialization intact.
             var settingsIL = s.SettingsAwake.Body.GetILProcessor();
             var returns = s.SettingsAwake.Body.Instructions.Where(i => i.OpCode == OpCodes.Ret).ToArray();

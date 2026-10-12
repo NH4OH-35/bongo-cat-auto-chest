@@ -20,6 +20,6 @@ jobs:
         with:
           name: BongoClaim-windows
           path: |
-            artifacts/BongoClaim-v1.1.0-windows.zip
-            artifacts/BongoClaim-v1.1.0-windows.zip.sha256
+            artifacts/BongoClaim-v1.2.0-windows.zip
+            artifacts/BongoClaim-v1.2.0-windows.zip.sha256
           if-no-files-found: error

@@ -1,33 +1,53 @@
 # BongoClaim ฅ
 
-**Auto-claim normal and emote chests in Bongo Cat, with simple in-game switches.** Install the Windows helper once, then launch Bongo Cat normally through Steam.
+**Auto-claim normal and emote chests, open stored chest tokens, and control your pet score in Bongo Cat.** Install the Windows helper once, then launch Bongo Cat normally through Steam.
 
 [Download the portable ZIP](https://github.com/NH4OH-35/bongo-claim/releases/latest) · [Report a problem](https://github.com/NH4OH-35/bongo-claim/issues)
 
 ![Bongo Cat Settings > General showing normal and emote auto-claim enabled](docs/game-settings.png)
 
+The screenshot shows the v1.1 auto-claim switches. v1.2 adds stored-token buttons, **Keep pets when claiming**, and **Edit pet score** in the same General panel.
+
 ## Everyday use
 
-**Already installed? Just start Bongo Cat normally from Steam.** Auto-claim runs inside the game; you can leave `BongoClaim.exe` closed. Keep Bongo Cat and Steam running. When an enabled chest is ready and you have enough earned pets, it claims automatically at the game's normal cost and cooldown.
+**Already installed? Just start Bongo Cat normally from Steam.** All controls run inside the game; you can leave `BongoClaim.exe` closed. Keep Bongo Cat and Steam running. Normal and emote auto-claim use their existing timer. By default, claims still cost pets.
 
 Open the game menu with **Escape** or **M**, click the **gear**, then choose **General**. Check **Auto claim normal chests** or **Auto claim emote chests** to enable that type; uncheck it to pause. Each choice takes effect while playing and saves for the next launch. Both start enabled. A request already sent to the server can still finish after switching off.
 
 For quick control with the game menu open, press **F7** for normal or **F9** for emote. **Shift + F9** also works for emote if plain F9 is intercepted or missed. Shortcuts work only while the game is focused and no text field is active. They update the same saved switches and checkmarks.
 
+Other menu shortcuts: **F5** toggles Keep pets, **F10** edits your pet score, **F11** opens one owned normal token, and **Insert** opens one owned emote token. Toggle and token shortcuts pause while you are editing a score.
+
+### Stored tokens and manual claims
+
+In **Settings → General**, the **Normal tokens: N | claim** and **Emote tokens: N | claim** rows show quantities from your Steam inventory. Click a row to open **one** owned token of that type. After it finishes, click again for another. These buttons work during the local countdown and independently of the auto-claim switches.
+
+Empty or loading rows cannot be clicked. The game must have the other exchange inputs it requires, sufficient pets unless **Keep pets** is enabled, and no pending request. Steam still decides whether the exchange succeeds. The buttons do not create tokens or change their server drop schedule. The game's normal successful or failed claim cooldown is retained.
+
+### Keep pets when claiming
+
+Enable **Keep pets when claiming** to open your normal and emote chests without deducting pets, including claims made through the original chest buttons. It starts **off** and saves separately from both auto-claim switches. Turning it off restores the normal pets price. Owned inventory tokens are consumed either way. A request already in progress uses the price choice captured when it started; gifting keeps its original spending rules.
+
+### Edit available pet score
+
+Click **Pets: N | edit** or press **F10** with the game menu open. Type the desired nonnegative whole number using the number row or numpad, then press **Enter** to save. **Backspace** deletes; **Escape** cancels. Clicking the editor again or closing the menu also cancels.
+
+This changes your **available pets** and saves through the game's Steam stats API. It preserves lifetime achievement taps and total pets previously spent. Values that would overflow the game's counter are rejected; the maximum is `2,147,483,646 − total spent`. Score editing does not grant inventory tokens or server eligibility. Restoring the game DLL removes these controls; it does not undo a score you explicitly saved.
+
 ## First-time installation
 
-1. Download `BongoClaim-v1.1.0-windows.zip` from Releases and **extract the whole ZIP**.
+1. Download `BongoClaim-v1.2.0-windows.zip` from Releases and **extract the whole ZIP**.
 2. Exit Bongo Cat normally.
 3. Open `BongoClaim.exe`. Keep `Mono.Cecil.dll` beside it.
 4. The app finds your running game or Steam library. If needed, browse to the folder containing `BongoCat.exe`.
-5. Click **Check build**, then **Install auto claim** (or **Upgrade controls** for v1.0).
+5. Click **Check build**, then **Install auto claim** (or **Upgrade controls** for v1.0/v1.1).
 6. Start Bongo Cat from Steam. The patch works inside the game; this helper does not need to stay open.
 
 ![BongoClaim desktop installer and restore controls](docs/desktop.png)
 
-Both chest types still use their normal in-game pets cost. Changes to these switches do not require reinstalling or keeping BongoClaim open. When upgrading v1.0, the tool builds the new patch from your verified original backup and keeps that same original for restoration.
+Changes to the saved switches do not require reinstalling or keeping BongoClaim open. Upgrades rebuild the patch from your verified original backup and retain that same original for restoration. Existing normal and emote preferences are preserved.
 
-The patch does not generate keyboard presses, inflate your pets counter, shorten cooldowns, bypass affordability, or change server eligibility. It calls the game's existing `ShopItem.Buy()` when its normal ready flag and affordability check allow it. An eligible chest still needs enough earned pets.
+Auto-claim calls the game's existing `ShopItem.Buy()` when a chest is ready. Manual stored-token claims also call `Buy()`, after checking owned inventory inputs and pending-request guards. The optional **Keep pets** switch changes the captured local price flag; the optional score editor changes only the available-pets counter through the game. No keyboard presses, Steam token grants or changes to the server drop schedule are generated.
 
 ## Why the old DLL stopped being suitable
 
@@ -36,8 +56,8 @@ The archived [Bongo-Cat-Auto-Claim](https://github.com/zelda0079/Bongo-Cat-Auto-
 BongoClaim instead:
 
 - Inspects the assembly actually installed on your computer.
-- Checks the expected chest, timer, affordability and purchase-lock structure.
-- Adds guarded claim logic and two matching native settings rows.
+- Checks the expected chest, timer, inventory, price and purchase-lock structure.
+- Adds guarded claim logic, three saved switches and three native action rows.
 - Backs up your exact original bytes before installing.
 - Verifies the patched assembly by reading it back.
 - Refuses unsupported layouts or an existing conflicting auto-claim mod.
@@ -67,9 +87,9 @@ Original Assembly-CSharp.dll SHA-256
 7566e8d9846cdb38eadcdb729cfcf676dc338cd738e99f664dc6ef3b79e87b83
 ```
 
-The current original assembly is inspected, patched and read back before installation. Only chest readiness, its timer and the settings initialization are hooked; purchase callbacks, prices and cooldowns are retained. This is build compatibility evidence, not a promise about future updates or server behavior.
+The current original assembly and its Unity/runtime dependencies are inspected before installation, and the patched output is read back. Chest callbacks, Steam exchanges and cooldowns are retained; optional controls change the local price flag and available-pets stat. This is build compatibility evidence, not a promise about future updates or server behavior.
 
-Thirty-three executable tests use a source-owned simulated game assembly to cover claims, independent live switches, saved preferences, native settings clicks and callback isolation, focused-menu keyboard controls, eligibility, affordability, pending requests, retrying an already-visible chest, null references, duplicate prevention, v1 upgrades, corrupted backups, Steam updates, unsupported layouts and exact restoration. No proprietary game files are needed to run those tests.
+Fifty executable tests use a source-owned simulated game assembly to cover claims, independent live switches, native actions, token counts and consumption, manual claims during cooldown, missing exchange inputs, pending requests, price choice captured per request, gift spending, score save/cancel/backspace/overflow, focus gates, v1/v2 upgrades, corrupted backups, Steam updates, unsupported layouts and exact restoration. No proprietary game files are needed to run those tests.
 
 **A live normal-chest smoke test passed on 12 October 2026.** After installing on build 25723683 and restarting through Steam, the normal ready-chest indicator disappeared and the normal 30-minute cooldown began without a manual claim click. The emote chest stayed ready in normal-only mode. The game's successful purchase callback starts that cooldown; its failed-request path instead retries after 60 seconds. No exceptions or runtime errors were found in the game log. The original backup matched its recorded SHA-256 exactly.
 
@@ -78,6 +98,10 @@ The earlier check verified normal claiming in v1.0; it did not record the cosmet
 **A live emote-chest smoke test passed for v1.1 on 12 October 2026.** Upgrading the same installation from its verified original backup enabled both chest types. After restarting through Steam, the previously ready emote indicator disappeared and its normal 30-minute cooldown began without a manual claim click. No runtime errors were found in the game log. The cosmetic's identity was not recorded.
 
 Live F7 and Shift + F9 checks changed the normal and emote saved settings independently from on to off and back to on through the new native controls. Both were left enabled. Plain F9 was missed by the automation tool on this PC; Shift + F9 reached the same emote handler. Automated mouse clicks were blocked by the game's transparent window, so checkbox clicks were verified in the behavioral fixture and the actual scene hierarchy was inspected separately.
+
+**Live v1.2 checks passed on the same build on 12 October 2026.** The General panel rendered all three switches and all three action rows, with real normal and emote token counts. F5 saved the Keep pets switch. A manual normal-token claim succeeded while its countdown was still running: its count decreased by one, the successful 30-minute cooldown restarted, and available pets stayed unchanged. A manual emote-token claim through Insert also reached the successful 30-minute cooldown while its previous countdown was still running. The F10 editor accepted a digit and Escape cancelled it without changing the score. The running game log contained no runtime errors after the final repairs.
+
+Live score saving and the cosmetic identities were not recorded. Score save/overflow/persistence logic and gift-cost isolation are covered by the behavioral tests. Future builds and server behavior remain outside these checks.
 
 ## Requirements and troubleshooting
 
@@ -126,6 +150,8 @@ Both chest types default to enabled. `--normal-only` makes the initial emote def
 The helper runs at the beginning of `OnChestReady()` and the game's existing timer state machine. The timer hook allows a later retry even when a popup is already shown. The game's timer interval, failed-request cooldown and purchase callbacks are preserved.
 
 `NativeControlsPatch.cs` adds native settings controls with separate keys and callbacks. Their saved values are read directly by the claim helper, so toggling does not change the installed DLL or its backup fingerprint.
+
+`OwnedTokensPatch.cs` rebinds source-owned feature methods from an embedded compile-time template to the game's own Unity and Steam APIs. Only the new feature members are copied; no stub types or template dependency are installed. `RuntimeFeatures.cs` implements token actions and the inline score editor. Normal tokens use `Chest_Token`; emote tokens use `Emote_Chest_Token`. Their quantities are read from `ItemData.GetTotalQuantity()`, and manual opens check the original full exchange requirements before entering the existing purchase path.
 
 No game or Steam assembly is shipped. Development inspection used [REA](https://github.com/morluto/rea) and [Mono.Cecil](https://github.com/jbevain/cecil). See [third-party notices](THIRD-PARTY-NOTICES.md).
 

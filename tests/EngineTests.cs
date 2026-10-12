@@ -55,6 +55,165 @@ namespace BongoClaim
         {
             return asm.GetType("BongoCat.SettingsFixture").GetMethod("Create").Invoke(null, null);
         }
+        private static object Pets(Assembly asm) { return asm.GetType("BongoCat.Pets").GetField("Instance").GetValue(null); }
+        private static int Balance(Assembly asm) { return (int)Pets(asm).GetType().GetProperty("Balance").GetValue(Pets(asm), null); }
+        private static void Quantity(Assembly asm, string name, long quantity) {
+            var field = asm.GetType("SteamTools.Game+Inventory").GetField(name); var value = field.GetValue(null);
+            value.GetType().GetField("Quantity").SetValue(value, quantity); field.SetValue(null, value);
+        }
+        private static long Quantity(Assembly asm, string name) {
+            var value = asm.GetType("SteamTools.Game+Inventory").GetField(name).GetValue(null); return (long)Call(value, "GetTotalQuantity");
+        }
+        private static void TypeScore(object settings, string score) { foreach (char digit in score) Call(settings, "KeyFrame", 48 + digit - '0'); }
+        private static void FeatureTests() {
+            Test("owned normal tokens open during countdown without enabling auto claim", delegate {
+                var asm = Patched(true); SetOption(asm, PatchEngine.NormalKey, false);
+                var shop = Shop(asm, false, false, false); var settings = Settings(asm); Call(settings, "Initialize");
+                // Settings resets the scene; recreate a discoverable shop afterward.
+                shop = Shop(asm, false, false, false); Quantity(asm, "Chest_Token", 3); Call(settings, "Refresh");
+                Assert(((string)Call(settings, "RowLabel", 4)).Contains("3"), "Owned-token count missing");
+                Call(settings, "ClickRow", 4); Assert(Purchases(shop) == 1, "Owned token waited for countdown");
+                Call(settings, "ClickRow", 4); Assert(Purchases(shop) == 1, "Repeated click duplicated pending request");
+                Call(Call(shop, "GetItem"), "Complete", true); Call(settings, "Refresh");
+                Assert(Quantity(asm, "Chest_Token") == 2 && Balance(asm) == 9000, "Successful claim did not consume exactly one token and price");
+                Assert((int)shop.GetType().GetField("StockRefreshTimeLeft").GetValue(shop) == 1800, "Successful claim altered cooldown");
+                Call(settings, "ClickRow", 4); Assert(Purchases(shop) == 2, "Second owned token could not be opened during countdown");
+            });
+            Test("owned emote button consumes only the matching token", delegate {
+                var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                var normal = Shop(asm, false, false, false); var emote = Shop(asm, false, false, true);
+                Quantity(asm, "Emote_Chest_Token", 5); Quantity(asm, "Chest_Token", 8); Call(settings, "Refresh");
+                Call(settings, "ClickRow", 5); Assert(Purchases(emote) == 1 && Purchases(normal) == 0, "Emote action selected wrong shop");
+                Call(Call(emote, "GetItem"), "Complete", true); Call(settings, "Refresh");
+                Assert(Quantity(asm, "Emote_Chest_Token") == 4 && Quantity(asm, "Chest_Token") == 8, "Wrong token consumed");
+            });
+            Test("zero tokens, missing exchange inputs and busy inventory block owned claims", delegate {
+                foreach (var token in new[] { "Chest_Token", "Achievement_Token", "ManualToken" }) {
+                    var asm = Patched(true); var shop = Shop(asm, false, false, false); Quantity(asm, token, 0);
+                    Assert(!(bool)Call(shop, "__BongoClaim_OpenOwned_v1", false) && Purchases(shop) == 0, "Claim ignored missing " + token);
+                }
+                var other = Patched(true); var guarded = Shop(other, false, false, false);
+                other.GetType("Steam.ChestExchanger").GetField("IsExchanging", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, true);
+                Assert(!(bool)Call(guarded, "__BongoClaim_OpenOwned_v1", false), "Global exchange lock ignored");
+                other.GetType("Steam.ChestExchanger").GetField("IsExchanging", BindingFlags.Static | BindingFlags.NonPublic).SetValue(null, false);
+                Call(Call(guarded, "GetItem"), "SetExchangeAllowed", false);
+                Assert(!(bool)Call(guarded, "__BongoClaim_OpenOwned_v1", false), "Full exchange requirements ignored");
+            });
+            Test("owned claims respect price, pending server state and shop type", delegate {
+                var asm = Patched(true); var shop = Shop(asm, false, false, false); Allow(asm, false);
+                Assert(!(bool)Call(shop, "__BongoClaim_OpenOwned_v1", false), "Owned claim bypassed default price");
+                SetOption(asm, PatchEngine.KeepPetsKey, true); Call(Call(shop, "GetItem"), "SetWaiting", true);
+                Assert(!(bool)Call(shop, "__BongoClaim_OpenOwned_v1", false), "Keep pets bypassed request lock");
+                Call(Call(shop, "GetItem"), "SetWaiting", false);
+                Assert(!(bool)Call(shop, "__BongoClaim_OpenOwned_v1", true), "Wrong shop type opened");
+                shop.GetType().GetMethod("ClearItem").Invoke(shop, null); Assert(!(bool)Call(shop, "__BongoClaim_OpenOwned_v1", false), "Null item accepted");
+            });
+            Test("failed owned-token request leaves inventory and pets intact", delegate {
+                var asm = Patched(true); var shop = Shop(asm, false, false, false); Call(shop, "__BongoClaim_OpenOwned_v1", false);
+                Call(Call(shop, "GetItem"), "Complete", false);
+                Assert(Quantity(asm, "Chest_Token") == 2 && Balance(asm) == 10000, "Failure consumed token or pets");
+                Assert((int)shop.GetType().GetField("StockRefreshTimeLeft").GetValue(shop) == 60, "Failure cooldown changed");
+            });
+            Test("token rows show loading, disable empty actions and preserve original callbacks", delegate {
+                var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                asm.GetType("SteamTools.Interface").GetProperty("IsReady").SetValue(null, false, null); Call(settings, "Refresh");
+                Assert(((string)Call(settings, "RowLabel", 4)).Contains("loading"), "Unknown inventory displayed as zero");
+                var shop = Shop(asm, false, false, false); Call(settings, "ClickRow", 4); Assert(Purchases(shop) == 0, "Loading row was clickable");
+                asm.GetType("SteamTools.Interface").GetProperty("IsReady").SetValue(null, true, null); Quantity(asm, "Chest_Token", 0); Call(settings, "Refresh"); Call(settings, "ClickRow", 4);
+                Assert(Purchases(shop) == 0 && !(bool)Call(settings, "RowCheckboxVisible", 4), "Empty token action or checkbox incorrect");
+                Assert((int)settings.GetType().GetField("SourceButtonClicks").GetValue(settings) == 0 && (int)settings.GetType().GetField("SourceEvents").GetValue(settings) == 0, "Action invoked original preference listeners");
+            });
+            Test("keep-pets control defaults off and saves independently", delegate {
+                var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                Assert(!(bool)Call(settings, "RowToggleActive", 3), "Keep pets silently started on");
+                Call(settings, "ClickRow", 3);
+                Assert(GetOption(asm, PatchEngine.KeepPetsKey, 0) == 1 && GetOption(asm, PatchEngine.NormalKey, 1) == 1 && GetOption(asm, PatchEngine.EmoteKey, 1) == 1, "Keep pets changed another preference");
+                Call(settings, "ClickRow", 3); Assert(GetOption(asm, PatchEngine.KeepPetsKey, 1) == 0, "Keep pets could not be disabled");
+            });
+            Test("menu shortcuts select owned token type and keep-pets state with focus guards", delegate {
+                var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                var normal = Shop(asm, false, false, false); var emote = Shop(asm, false, false, true); Call(Pets(asm), "ConfigureStats", 0, 0, true);
+                foreach (var context in new[] { new[] { false, true, false }, new[] { true, false, false }, new[] { true, true, true } }) {
+                    Call(settings, "SetContext", context[0], context[1], context[2]); Call(settings, "KeyFrame", 286); Call(settings, "KeyFrame", 292);
+                    Assert(Purchases(normal) == 0 && GetOption(asm, PatchEngine.KeepPetsKey, 0) == 0, "Blocked shortcut acted");
+                }
+                Call(settings, "SetContext", true, true, false); Call(settings, "KeyFrame", 286); Assert(GetOption(asm, PatchEngine.KeepPetsKey, 0) == 1 && (bool)Call(settings, "RowToggleActive", 3), "F5 did not update saved native control");
+                Call(settings, "KeyFrame", 292); Call(settings, "KeyFrame", 292); Assert(Purchases(normal) == 1 && Purchases(emote) == 0, "F11 duplicated or selected wrong type");
+                Call(Call(normal, "GetItem"), "Complete", true); Call(settings, "KeyFrame", 277); Assert(Purchases(emote) == 1, "Insert did not select emote");
+                Call(Call(emote, "GetItem"), "Complete", true); Assert(Balance(asm) == 0, "Shortcut claims deducted pets");
+                Call(settings, "KeyFrame", 277); Assert(Purchases(emote) == 2 && Purchases(normal) == 1, "Emote shortcut selected the normal chest");
+            });
+            Test("keep-pets claims work at zero score and preserve both chest prices when disabled", delegate {
+                foreach (bool emote in new[] { false, true }) {
+                    var asm = Patched(true); Call(Pets(asm), "ConfigureStats", 0, 0, true); SetOption(asm, PatchEngine.KeepPetsKey, true);
+                    var shop = Shop(asm, true, false, emote); Call(shop, "OnChestReady"); Call(Call(shop, "GetItem"), "Complete", true);
+                    Assert(Purchases(shop) == 1 && Balance(asm) == 0, "Keep-pets claim charged or rejected zero score");
+                    SetOption(asm, PatchEngine.KeepPetsKey, false); var next = Shop(asm, true, false, emote); Call(next, "OnChestReady"); Assert(Purchases(next) == 0, "Disabling keep pets did not restore price check");
+                }
+            });
+            Test("price choice is captured per request and gift spending is unchanged", delegate {
+                var asm = Patched(true); var shop = Shop(asm, false, false, false); var item = Call(shop, "GetItem");
+                Call(item, "Buy"); SetOption(asm, PatchEngine.KeepPetsKey, true); Call(item, "Complete", true); Assert(Balance(asm) == 9000, "Switch retroactively changed pending request");
+                Call(item, "Buy"); SetOption(asm, PatchEngine.KeepPetsKey, false); Call(item, "Complete", true); Assert(Balance(asm) == 9000, "Switch charged a captured free request");
+                SetOption(asm, PatchEngine.KeepPetsKey, true); Assert((bool)Call(item, "TrySpendForGift") && Balance(asm) == 8000, "Keep pets changed gift spending");
+            });
+            Test("score editor saves available pets without changing lifetime or total spent", delegate {
+                var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize"); Call(Pets(asm), "ConfigureStats", 10000, 2500, true);
+                Call(settings, "ClickRow", 6); TypeScore(settings, "12345"); Call(settings, "KeyFrame", 13);
+                Assert(Balance(asm) == 12345 && (int)Pets(asm).GetType().GetProperty("TotalSpent").GetValue(Pets(asm), null) == 2500 && (int)Pets(asm).GetType().GetField("Lifetime").GetValue(Pets(asm)) == 10000, "Editor changed unrelated score fields");
+                Assert((int)asm.GetType("Heathen.SteamworksIntegration.API.StatsAndAchievements+Client").GetField("Stores").GetValue(null) == 1, "Editor did not save Steam stats");
+            });
+            Test("score editor cancels, supports backspace and blocks other menu hotkeys while typing", delegate {
+                var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize"); Call(settings, "KeyFrame", 291); TypeScore(settings, "999"); Call(settings, "Frame", true, true);
+                Assert(GetOption(asm, PatchEngine.NormalKey, 1) == 1 && GetOption(asm, PatchEngine.EmoteKey, 1) == 1, "Typing toggled auto claim");
+                Call(settings, "KeyFrame", 27); Assert(Balance(asm) == 10000, "Cancel saved score");
+                Call(settings, "ClickRow", 6); TypeScore(settings, "12"); Call(settings, "KeyFrame", 8); TypeScore(settings, "3"); Call(settings, "KeyFrame", 271); Assert(Balance(asm) == 13, "Backspace or keypad Enter failed");
+            });
+            Test("score changes reject overflow, negative values and uninitialised stats", delegate {
+                var asm = Patched(true); var pets = Pets(asm);
+                Assert(!(bool)Call(pets, "__BongoClaim_SetScore_v1", -1), "Negative score accepted");
+                Call(pets, "ConfigureStats", 2000, 1000, true); Assert(!(bool)Call(pets, "__BongoClaim_SetScore_v1", Int32.MaxValue), "Overflow score accepted");
+                Assert(Balance(asm) == 1000, "Invalid score modified balance");
+                Call(pets, "ConfigureStats", 2000, 1000, false); Assert(!(bool)Call(pets, "__BongoClaim_SetScore_v1", 5), "Uninitialized stats modified");
+                Call(pets, "ConfigureStats", 2000, 1000, true); Assert((bool)Call(pets, "__BongoClaim_SetScore_v1", 0) && Balance(asm) == 0, "Zero score rejected");
+            });
+            Test("score input ignores unfocused and text-field contexts and cancels on menu close", delegate {
+                var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
+                Call(settings, "SetContext", false, true, false); Call(settings, "KeyFrame", 291); Call(settings, "SetContext", true, true, false); TypeScore(settings, "5"); Call(settings, "KeyFrame", 13); Assert(Balance(asm) == 10000, "Unfocused F10 entered editor");
+                Call(settings, "ClickRow", 6); Call(settings, "SetContext", true, true, true); TypeScore(settings, "9"); Call(settings, "SetContext", true, true, false); TypeScore(settings, "7"); Call(settings, "SetContext", true, false, false); Call(settings, "Refresh");
+                Call(settings, "SetContext", true, true, false); Call(settings, "KeyFrame", 13); Assert(Balance(asm) == 10000, "Menu close committed editing buffer");
+            });
+            Test("runtime template dependencies and compile-time stub types never enter patched assembly", delegate {
+                var output = NewFile("stubs"); PatchEngine.PatchCopy(fixture, output, true);
+                using (var source = AssemblyDefinition.ReadAssembly(fixture)) using (var asm = AssemblyDefinition.ReadAssembly(output, new ReaderParameters { InMemory = true })) {
+                    Assert(!asm.MainModule.AssemblyReferences.Any(a => a.Name.Contains("RuntimeTemplate")), "Runtime template became a game dependency");
+                    Assert(asm.MainModule.GetTypes().Select(t => t.FullName).SequenceEqual(source.MainModule.GetTypes().Select(t => t.FullName)), "Stub types were shipped into game");
+                }
+            });
+            Test("v2 upgrade rebuilds token and score controls from the original backup", delegate {
+                var root = NewGame(); var target = PatchEngine.GameAssembly(root); var original = PatchEngine.Hash(target);
+                WriteLegacyPatch(target, true);
+                using (var asm = AssemblyDefinition.ReadAssembly(target, new ReaderParameters { InMemory = true })) {
+                    var shop = asm.MainModule.Types.Single(t => t.FullName == "BongoCat.Shop");
+                    shop.Methods.Single(m => m.Name == PatchEngine.LegacyMarker).Name = PatchEngine.V2Marker;
+                    shop.Fields.Single(f => f.Name == "__BongoClaim_Emotes_v1").Name = PatchEngine.V2SettingsMarker;
+                    NativeControlsPatch.Apply(asm, true); asm.Write(target);
+                }
+                SaveLegacyState(root, original, PatchEngine.Hash(target), true);
+                var prior = PatchEngine.Inspect(target); Assert(prior.Supported && prior.RuntimeControls && !prior.OwnedTokenControls, "v2 misidentified");
+                PatchEngine.Install(root, true); Assert(PatchEngine.Inspect(target).OwnedTokenControls && PatchEngine.LoadState(root).Version == 3, "v2 upgrade omitted new controls");
+                Assert(PatchEngine.LoadState(root).OriginalHash == original, "v2 upgrade backed up modified DLL");
+                PatchEngine.Restore(root); Assert(PatchEngine.Hash(target) == original, "v2 upgrade restore not exact");
+            });
+            Test("unknown token layouts and incomplete new controls are rejected", delegate {
+                var input = NewFile("missing-token");
+                using (var asm = AssemblyDefinition.ReadAssembly(fixture)) { asm.MainModule.GetTypes().Single(t => t.FullName == "SteamTools.Game/Inventory").Fields.Single(f => f.Name == "Chest_Token").Name = "ChangedToken"; asm.Write(input); }
+                Assert(!PatchEngine.Inspect(input).Supported, "Unknown token field accepted");
+                var output = NewFile("missing-score"); PatchEngine.PatchCopy(fixture, output, true);
+                using (var asm = AssemblyDefinition.ReadAssembly(output, new ReaderParameters { InMemory = true })) { var pets = asm.MainModule.Types.Single(t => t.FullName == "BongoCat.Pets"); pets.Methods.Single(m => m.Name == "__BongoClaim_SetScore_v1").Name = "RemovedFeature"; asm.Write(output); }
+                Assert(!PatchEngine.Inspect(output).Supported, "Incomplete score control accepted");
+            });
+        }
         private static void Prepend(MethodDefinition method, params Instruction[] instructions)
         {
             var first = method.Body.Instructions[0]; var il = method.Body.GetILProcessor();
@@ -149,12 +308,12 @@ namespace BongoClaim
                 });
                 Test("native General rows initialise both defaults and avoid duplicate rows", delegate {
                     var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
-                    Assert((int)Call(settings, "GeneralRowCount") == 3, "Expected Autostart plus exactly two auto-claim rows");
+                    Assert((int)Call(settings, "GeneralRowCount") == 7, "Expected Autostart, three toggles and three action rows");
                     Assert(((string)Call(settings, "RowLabel", 1)).IndexOf("normal", StringComparison.OrdinalIgnoreCase) >= 0, "Normal row label missing");
                     Assert(((string)Call(settings, "RowLabel", 2)).IndexOf("emote", StringComparison.OrdinalIgnoreCase) >= 0, "Emote row label missing");
                     Assert((bool)Call(settings, "RowToggleActive", 1) && (bool)Call(settings, "RowToggleActive", 2), "Defaults not active when settings first opens");
                     Assert(!String.IsNullOrWhiteSpace((string)Call(settings, "RowTooltip", 1)) && !String.IsNullOrWhiteSpace((string)Call(settings, "RowTooltip", 2)), "Control explanations missing");
-                    Call(settings, "Initialize"); Assert((int)Call(settings, "GeneralRowCount") == 3, "Repeated initialization duplicated controls");
+                    Call(settings, "Initialize"); Assert((int)Call(settings, "GeneralRowCount") == 7, "Repeated initialization duplicated controls");
                 });
                 Test("native settings use saved values and clicks change each claim mode live", delegate {
                     var asm = Patched(true); SetOption(asm, PatchEngine.NormalKey, false); SetOption(asm, PatchEngine.EmoteKey, true);
@@ -184,7 +343,7 @@ namespace BongoClaim
                     Assert(rejected, "Fixture cloning failure did not propagate");
                     var guard = asm.GetType("BongoCat.PlayerPrefsToggle").GetField("__BongoClaim_CloneInProgress_v1", BindingFlags.Static | BindingFlags.NonPublic);
                     Assert(guard != null && !(bool)guard.GetValue(null), "Failed clone left all preference Awake methods disabled");
-                    Call(settings, "Initialize"); Assert((int)Call(settings, "GeneralRowCount") == 3, "Native initialization could not retry after failed clone");
+                    Call(settings, "Initialize"); Assert((int)Call(settings, "GeneralRowCount") == 7, "Native initialization could not retry after failed clone");
                 });
                 Test("focused-menu hotkeys independently toggle native rows and persist their states", delegate {
                     var asm = Patched(true); var settings = Settings(asm); Call(settings, "Initialize");
@@ -295,6 +454,7 @@ namespace BongoClaim
                     }
                     Assert(!PatchEngine.Inspect(input).Supported, "Other mod accepted");
                 });
+                FeatureTests();
                 Console.WriteLine("All " + passed + " tests passed."); return 0;
             }
             catch (Exception ex)
