@@ -20,6 +20,6 @@ jobs:
         with:
           name: BongoCatAutoChest-windows
           path: |
-            artifacts/BongoCatAutoChest-v1.2.0-windows.zip
-            artifacts/BongoCatAutoChest-v1.2.0-windows.zip.sha256
+            artifacts/BongoCatAutoChest-v1.3.0-windows.zip
+            artifacts/BongoCatAutoChest-v1.3.0-windows.zip.sha256
           if-no-files-found: error

@@ -20,15 +20,15 @@ $commonArgs = @('/nologo', '/optimize+', '/platform:anycpu', "/reference:$cecilD
 if ($LASTEXITCODE -ne 0) { throw 'Runtime template compilation failed.' }
 $commonArgs += '/resource:artifacts\RuntimeTemplate.dll,BongoClaim.RuntimeTemplate.dll'
 Copy-Item -LiteralPath $cecilDll -Destination artifacts\Mono.Cecil.dll -Force
-& $compiler @commonArgs /target:winexe /out:artifacts\BongoCatAutoChest.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32manifest:src\app.manifest src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\MainForm.cs
+& $compiler @commonArgs /target:winexe /out:artifacts\BongoCatAutoChest.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /win32manifest:src\app.manifest src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\StartupLauncher.cs src\MainForm.cs
 if ($LASTEXITCODE -ne 0) { throw 'Desktop compilation failed.' }
-& $compiler @commonArgs /target:exe /out:artifacts\BongoCatAutoChest.Cli.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\MainForm.cs
+& $compiler @commonArgs /target:exe /out:artifacts\BongoCatAutoChest.Cli.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll src\Program.cs src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\StartupLauncher.cs src\MainForm.cs
 if ($LASTEXITCODE -ne 0) { throw 'CLI compilation failed.' }
 if ($Test) {
     & $compiler /nologo /optimize+ /target:library /out:artifacts\Assembly-CSharp.dll tests\GameFixture.cs
     if ($LASTEXITCODE -ne 0) { throw 'Fixture compilation failed.' }
     Copy-Item -LiteralPath $cecilDll -Destination artifacts\Mono.Cecil.dll -Force
-    & $compiler @commonArgs /target:exe /out:artifacts\BongoClaim.Tests.exe src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs tests\EngineTests.cs
+    & $compiler @commonArgs /target:exe /out:artifacts\BongoClaim.Tests.exe src\PatchEngine.cs src\NativeControlsPatch.cs src\OwnedTokensPatch.cs src\StartupLauncher.cs tests\EngineTests.cs
     if ($LASTEXITCODE -ne 0) { throw 'Tests compilation failed.' }
     & .\artifacts\BongoClaim.Tests.exe
     if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }

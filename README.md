@@ -1,24 +1,26 @@
 # Bongo Cat Auto Chest ฅ
 
-**Auto-claim normal and emote chests, open stored tokens, and control your pet score in Bongo Cat.** Install once, then play normally through Steam. Bongo Cat Auto Chest does not need to stay open.
+**Auto-claim normal and emote chests, open stored tokens, and control your pet score in Bongo Cat.** Play normally through Steam after installing the patch. Optional startup repair checks the patch before launching the game and reapplies it after compatible Steam updates. The helper does not need to stay open during play.
 
-[Download Bongo Cat Auto Chest v1.2.0 for Windows](https://github.com/NH4OH-35/bongo-cat-auto-chest/releases/download/v1.2.0/BongoCatAutoChest-v1.2.0-windows.zip) · [All releases](https://github.com/NH4OH-35/bongo-cat-auto-chest/releases) · [Report a problem](https://github.com/NH4OH-35/bongo-cat-auto-chest/issues)
+[Download Bongo Cat Auto Chest v1.3.0 for Windows](https://github.com/NH4OH-35/bongo-cat-auto-chest/releases/download/v1.3.0/BongoCatAutoChest-v1.3.0-windows.zip) · [All releases](https://github.com/NH4OH-35/bongo-cat-auto-chest/releases) · [Report a problem](https://github.com/NH4OH-35/bongo-cat-auto-chest/issues)
 
 ![Bongo Cat Auto Chest v1.2 in Bongo Cat General settings: normal and emote auto-claim, Keep pets, token claim buttons, and pet score editor](docs/game-settings.png)
 
-The screenshot shows the current **v1.2** controls. Your token counts and pet score will differ. **Keep pets when claiming** is checked in this example; it starts **off** on a fresh installation.
+The screenshot shows the in-game controls introduced in **v1.2**, which are unchanged in **v1.3**. Your token counts and pet score will differ. **Keep pets when claiming** is checked in this example; it starts **off** on a fresh installation.
 
 ## 1. Install or upgrade
 
-**Already using v1.2 and seeing these controls? Skip to step 2.** The project rename does not require reinstalling the game patch.
+**Already using v1.2? Download the v1.3 helper for startup repair.** If the game still shows all six added rows, its patch is already installed. If a Steam update removed them, follow the installation steps below.
 
-1. Download **BongoCatAutoChest-v1.2.0-windows.zip** using the link above. Do not download GitHub's **Source code** ZIP for installation.
+1. Download **BongoCatAutoChest-v1.3.0-windows.zip** using the link above. Do not download GitHub's **Source code** ZIP for installation.
 2. Right-click the downloaded ZIP → **Extract All…** → **Extract**. Open the extracted folder; do not run the app from inside the ZIP.
 3. Exit **Bongo Cat** normally. Leave Steam available for launching the game later.
 4. Double-click **BongoCatAutoChest.exe**. Keep **Mono.Cecil.dll** in the same folder. **BongoCatAutoChest.Cli.exe** is optional and is not needed for normal use.
 5. Check the game folder shown in Bongo Cat Auto Chest. If it is empty or wrong, click **Browse…** and select the folder containing **BongoCat.exe**. Select the **folder**, not the EXE file, **BongoCat_Data**, or **Managed**. You can find it through Steam → Bongo Cat → **Properties → Installed Files → Browse**.
 6. The helper checks the build automatically. You can click **Check build** to check again. If the build is supported, click **Install auto claim →**. Existing v1.0/v1.1 installations show **Upgrade controls →** instead.
 7. Wait for the success message. The button changes to **Controls installed**. Close Bongo Cat Auto Chest and launch **Bongo Cat from Steam**.
+
+For automatic checks at Windows sign-in, continue with [Set up startup repair](#set-up-startup-repair).
 
 The installer backs up your exact original game DLL before patching it. Upgrades use that verified original backup and preserve your saved normal/emote switch settings.
 
@@ -29,7 +31,7 @@ The installer backs up your exact original game DLL before patching it. Upgrades
 3. Click the **gear** tab, then **General**.
 4. Scroll down inside the panel until you see the rows shown in the screenshot.
 
-You only run Bongo Cat Auto Chest again to install, upgrade, check compatibility, or restore the original game. Leave **Steam and Bongo Cat running** for auto-claim to work.
+Leave **Steam and Bongo Cat running** for auto-claim to work. You can close the helper after launching the game. If startup repair is enabled, it runs again at Windows sign-in to check the patch and start the game.
 
 ## 3. Turn automatic claims on or off
 
@@ -91,17 +93,52 @@ Focus Bongo Cat and keep its menu open. Shortcuts do not run while another text 
 
 During score editing, **Enter** saves, **Escape** cancels, and **Backspace** deletes a digit. If plain F9 is missed on your PC, **Shift + F9** reaches the same emote toggle. The shortcuts update the same saved controls as mouse clicks.
 
+## Set up startup repair
+
+A Steam update can replace the patched game DLL with the official one. This removes the added controls until the patch is reapplied. **v1.3 startup repair** checks for that before launching Bongo Cat and repairs supported builds automatically.
+
+1. In Bongo Cat, open **gear → General** and enable the game's **Autostart** setting if you want it to start when you sign in to Windows.
+2. Let Steam finish any game update, then exit Bongo Cat normally.
+3. Open **BongoCatAutoChest.exe** from the extracted v1.3 folder and check the selected game folder.
+4. Click **Check build**. Install the patch if it is absent and the current build is supported.
+5. Click **Enable startup repair** and wait for its success message. The button changes to **Disable startup repair**.
+6. Close the helper. At your next Windows sign-in, startup repair checks the game while it is closed, reapplies a compatible missing patch if needed, then launches Bongo Cat through Steam.
+
+The helper keeps its own executable and Mono.Cecil dependency in `%LOCALAPPDATA%\BongoCatAutoChest` for startup use. Moving or deleting the extracted download folder does not remove that startup copy. You can keep the original download for later maintenance.
+
+**Keep the game's Autostart setting on if you want this startup check.** Turning Autostart off removes the game's startup entry. Turning it back on points that entry directly at the game again; open the v1.3 helper and click **Enable startup repair** again to restore the check.
+
+To stop automatic repair, click **Disable startup repair** in the helper. This restores the previous startup command if Bongo Cat Auto Chest still owns the entry. It restores the startup choice that existed before you enabled repair. The installed chest controls remain.
+
+### Repair and launch manually after an update
+
+1. Let Steam finish updating Bongo Cat, then exit the game.
+2. Open PowerShell in the extracted v1.3 folder.
+3. Run the following, replacing the example with your game folder:
+
+```powershell
+.\BongoCatAutoChest.Cli.exe --launch 'G:\SteamLibrary\steamapps\common\BongoCat'
+```
+
+This checks or repairs the patch, then starts the game through Steam. Startup repair uses the same launch action at Windows sign-in. A direct Steam launch uses whatever DLL is currently installed; it does not run this repair check.
+
+The helper refuses to patch a running game, a pending Steam update, or an unsupported assembly layout. If Steam replaces the DLL during launch, the helper reports it and asks you to exit the game and launch through the helper again after the update finishes. Unsupported builds need a compatible helper update.
+
 ## Troubleshooting
 
 | What you see | What to do |
 | --- | --- |
 | **Controls installed** in the helper | The patch is already installed. Start Bongo Cat from Steam; no second installation is needed. |
-| Missing rows in General | Scroll down. If you only have the two auto-claim switches, exit the game and use **Upgrade controls** in v1.2. |
+| Missing rows in General | Scroll down. If only the two auto-claim switches remain, exit the game and use **Upgrade controls**. If all added rows disappeared after an update, check the build and install again, or use the v1.3 startup repair launcher. |
 | **0** tokens or **loading** | Zero means no owned token is available. For loading, allow Steam inventory to finish loading with Steam running. |
 | Tokens exist but a claim does not start | Wait for any pending request. Check the game's exchange requirements and your pet balance, or enable **Keep pets**. |
 | Pets decreased during a claim | Check **Keep pets when claiming** before starting another claim. It defaults off; changing it does not alter a request already sent. |
 | Missing **Mono.Cecil.dll** or dependency error | Extract the whole release ZIP and keep its files together. |
-| Game is running during install or restore | Exit Bongo Cat normally, then try again. The helper will not force-close it. |
+| Game is running during install, repair or restore | Exit Bongo Cat normally, then try again. The helper will not force-close it. |
+| Auto-claim disappeared after a Steam update | Steam may have replaced the patched DLL. Finish the update, exit the game, then run the v1.3 helper's `--launch` action or install the patch again. |
+| Startup repair reports a pending Steam update | Allow Steam to finish the update before retrying. The helper will not patch during the update. |
+| Game starts at sign-in but the controls are missing | If you toggled the game's Autostart setting off and on, reopen the helper and click **Enable startup repair** again. |
+| DLL changed during launch | Exit the game, let Steam finish, then launch through the helper again. |
 | Unsupported build or a blocked file write | Read the reported error. The helper refuses incompatible layouts and does not change Windows security settings. Report the build ID and error text. |
 
 Requires **Windows 10 or 11**, **.NET Framework 4.8** (normally already installed), the Steam Windows version of Bongo Cat, and write access to its game folder. No administrator privileges are requested. Release binaries are unsigned. Keep antivirus protection enabled.
@@ -113,7 +150,7 @@ Requires **Windows 10 or 11**, **.NET Framework 4.8** (normally already installe
 3. Click **Restore original** and wait for success.
 4. Close the helper and start Bongo Cat through Steam.
 
-Restoration returns the original DLL byte-for-byte. Game saves and inventory files are not touched. A pet score you explicitly saved remains saved.
+Restoration also disables startup repair and restores the previous startup command when the helper still owns it. It returns the matching original DLL byte-for-byte. Game saves and inventory files are not touched. A pet score you explicitly saved remains saved.
 
 Backups live inside the selected game folder:
 
@@ -129,21 +166,28 @@ The helper verifies backup hashes before using them. If Steam changes the instal
 
 1. Exit Bongo Cat after Steam finishes the update.
 2. Open Bongo Cat Auto Chest and click **Check build**.
-3. If the current build is supported and the patch is absent, install it again, then start the game through Steam. Previous backups are retained.
+3. If the current build is supported and the patch is absent, install it again, then start the game through Steam. Alternatively, use the v1.3 `--launch` action to check, repair and launch in one step. Previous backups are retained.
 4. If the layout is unsupported, wait for a compatible Bongo Cat Auto Chest update and report your build ID.
 
 If you previously installed the archived replacement DLL, or your original backup is missing or damaged, use Steam → Bongo Cat → **Properties → Installed Files → Verify integrity of game files** to recover the current official files before applying Bongo Cat Auto Chest.
 
 ## Compatibility and validation
 
-Compatibility and live checks were performed on **12 October 2026**, on Steam Windows build **25723683**:
+The **14 October 2026** Steam update installed Windows build **25936063** and replaced the patched DLL. On **15 October 2026**, the helper inspected that build, confirmed its layout was compatible, and reapplied the patch. Saved switch preferences were retained. Startup enable/disable/re-enable restored the original command exactly, and the permanent helper/dependency copies matched their source hashes. A controlled live replacement with the verified official DLL was automatically repaired by the saved launcher before starting through Steam; the patched file and startup command remained intact after launch, and the game log contained no runtime errors. A full Windows reboot with startup repair has not been recorded.
+
+```text
+Build 25936063 original Assembly-CSharp.dll SHA-256
+96bbcbb2733988fd31ce261891eb3027888389e03b6a23dbd63e9e7f518adfb8
+```
+
+Earlier compatibility and live checks were performed on **12 October 2026**, on Steam Windows build **25723683**:
 
 ```text
 Original Assembly-CSharp.dll SHA-256
 7566e8d9846cdb38eadcdb729cfcf676dc338cd738e99f664dc6ef3b79e87b83
 ```
 
-**50 executable tests passed** using a source-owned simulated game assembly. They cover automatic and manual claims, independent switches, token quantities and consumption, claims during cooldown, missing inputs and pending requests, captured price choices, gift spending, score save/cancel/backspace/overflow, focus gates, upgrades, corrupted backups, Steam updates, rollback and exact restoration.
+**58 executable tests passed** using a source-owned simulated game assembly. They cover automatic and manual claims, independent switches, token quantities and consumption, claims during cooldown, missing inputs and pending requests, captured price choices, gift spending, score save/cancel/backspace/overflow, focus gates, upgrades, corrupted backups, Steam updates, rollback and exact restoration. Eight launcher tests additionally cover automatic preparation, repeated no-op checks, supported Steam replacements, retained original backups, unsupported builds, pending updates and malformed manifest flags.
 
 Live checks verified normal and emote automatic claims in earlier versions. In v1.2, all six added rows rendered; a stored normal-token claim succeeded during countdown without reducing pets; an emote-token claim through Insert reached its successful cooldown during countdown; and score input followed by cancellation left the score unchanged. The final game log contained no runtime errors. **Live score saving and cosmetic identities were not recorded**; score saving and persistence are covered by the simulated-game tests. The supplied screenshot documents the current controls.
 
@@ -170,8 +214,13 @@ For diagnostics and scripted use:
 .\BongoCatAutoChest.Cli.exe --inspect 'G:\SteamLibrary\steamapps\common\BongoCat'
 .\BongoCatAutoChest.Cli.exe --install 'G:\SteamLibrary\steamapps\common\BongoCat'
 .\BongoCatAutoChest.Cli.exe --restore 'G:\SteamLibrary\steamapps\common\BongoCat'
+.\BongoCatAutoChest.Cli.exe --enable-startup 'G:\SteamLibrary\steamapps\common\BongoCat'
+.\BongoCatAutoChest.Cli.exe --disable-startup 'G:\SteamLibrary\steamapps\common\BongoCat'
+.\BongoCatAutoChest.Cli.exe --launch 'G:\SteamLibrary\steamapps\common\BongoCat'
 .\BongoCatAutoChest.Cli.exe --patch-copy 'path\Assembly-CSharp.dll' "$env:TEMP\patched-copy.dll"
 ```
+
+`--enable-startup` installs the stable launcher and wraps the existing Bongo Cat startup entry. `--disable-startup` restores the previous command when this helper still owns the entry. `--launch` checks the current build while the game is closed, installs a missing compatible patch, and launches through Steam.
 
 Both chest types default on. `--normal-only` makes the initial emote default off; a saved in-game preference takes precedence. `--emotes` remains accepted for compatibility with v1.0. `--verbose` includes a diagnostic stack trace. `--patch-copy` refuses to overwrite its source or an existing output.
 
@@ -184,6 +233,8 @@ The archived [Bongo-Cat-Auto-Claim](https://github.com/zelda0079/Bongo-Cat-Auto-
 `NativeControlsPatch.cs` adds three saved switches and three native action rows. `OwnedTokensPatch.cs` binds source-owned feature methods from an embedded compile-time template to the installed game's Unity and Steam APIs. Only new feature members are copied; no stub types or template dependency are installed.
 
 `RuntimeFeatures.cs` reads the real normal and emote inventory quantities, checks the full exchange requirements before manual purchases, and implements the inline score editor. Keep pets changes the captured local price flag for chest purchases. No game or Steam assembly is shipped.
+
+Startup repair uses the same compatibility, backup and atomic-write checks as manual installation. It changes only the current user's Bongo Cat startup entry, preserves its previous command for disabling or restoration, and keeps older exact backups after Steam updates.
 
 Development inspection used [REA](https://github.com/morluto/rea) and [Mono.Cecil](https://github.com/jbevain/cecil). See [third-party notices](THIRD-PARTY-NOTICES.md).
 

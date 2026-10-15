@@ -42,11 +42,23 @@ namespace BongoClaim
                             return 0;
                         case "--restore":
                             if (args.Length < 2) throw new ArgumentException("Usage: --restore <game folder>");
-                            Console.WriteLine(PatchEngine.Restore(args[1]));
+                            PatchEngine.EnsureGameClosed(args[1]); StartupLauncher.Disable(args[1]); Console.WriteLine(PatchEngine.Restore(args[1]));
+                            return 0;
+                        case "--enable-startup":
+                            if (args.Length < 2) throw new ArgumentException("Usage: --enable-startup <game folder>");
+                            Console.WriteLine(StartupLauncher.Enable(args[1]));
+                            return 0;
+                        case "--disable-startup":
+                            if (args.Length < 2) throw new ArgumentException("Usage: --disable-startup <game folder>");
+                            Console.WriteLine(StartupLauncher.Disable(args[1]));
+                            return 0;
+                        case "--launch":
+                            if (args.Length < 2) throw new ArgumentException("Usage: --launch <game folder>");
+                            Console.WriteLine(StartupLauncher.Launch(args[1]));
                             return 0;
                         default:
-                            Console.WriteLine("Bongo Cat Auto Chest 1.2.0 — run without arguments for the desktop app.");
-                            Console.WriteLine("Commands: --inspect, --patch-copy, --install, --restore. Both chest types start enabled.");
+                            Console.WriteLine("Bongo Cat Auto Chest 1.3.0 — run without arguments for the desktop app.");
+                            Console.WriteLine("Commands: --inspect, --patch-copy, --install, --restore, --enable-startup, --disable-startup, --launch.");
                             Console.WriteLine("Optional: --normal-only starts emote claims disabled; --emotes is accepted for compatibility.");
                             Console.WriteLine("After installation, use Bongo Cat Settings > General for saved toggles, owned tokens and pet controls.");
                             Console.WriteLine("Keyboard: open the game menu, then F7 for normal or F9 for emote. Choices are saved.");
@@ -54,7 +66,12 @@ namespace BongoClaim
                             return args[0] == "--help" ? 0 : 2;
                     }
                 }
-                catch (Exception ex) { Console.Error.WriteLine(Array.IndexOf(args, "--verbose") >= 0 ? ex.ToString() : ex.Message); return 1; }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(Array.IndexOf(args, "--verbose") >= 0 ? ex.ToString() : ex.Message);
+                    if (args[0] == "--launch") MessageBox.Show(ex.Message + "\n\nOpen Bongo Cat Auto Chest to check your game. No running game was patched.", "Bongo Cat Auto Chest — startup check", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return 1;
+                }
             }
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);

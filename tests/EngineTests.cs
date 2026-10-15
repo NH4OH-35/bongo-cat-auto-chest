@@ -256,6 +256,80 @@ namespace BongoClaim
                 new DataContractJsonSerializer(typeof(InstallState)).WriteObject(stream, new InstallState { Version = 1, OriginalHash = originalHash, PatchedHash = patchedHash, Emotes = emotes, InstalledUtc = DateTime.UtcNow.ToString("o") });
         }
 
+        private static void StartupTests()
+        {
+            Func<string> newSteamGame = delegate {
+                var steamApps = Path.Combine(temp, "steamapps-" + Guid.NewGuid().ToString("N"));
+                var root = Path.Combine(steamApps, "common", "BongoCat");
+                var target = PatchEngine.GameAssembly(root); Directory.CreateDirectory(Path.GetDirectoryName(target));
+                File.Copy(fixture, target); File.WriteAllText(Path.Combine(root, "BongoCat.exe"), "source-owned launcher fixture");
+                return root;
+            };
+            Func<string, string> manifestPath = root => Path.Combine(Directory.GetParent(root).Parent.FullName, "appmanifest_3419430.acf");
+            Func<string, string[]> snapshot = root => Directory.GetFiles(root, "*", SearchOption.AllDirectories).OrderBy(p => p, StringComparer.Ordinal).Select(p => p.Substring(root.Length) + ":" + PatchEngine.Hash(p)).ToArray();
+            Test("launcher preparation installs and verifies the current controls and original backup", delegate {
+                var root = NewGame(); var target = PatchEngine.GameAssembly(root); var original = PatchEngine.Hash(target);
+                var ready = StartupLauncher.Prepare(root); var state = PatchEngine.LoadState(root);
+                Assert(ready.Supported && ready.Installed && ready.RuntimeControls && ready.OwnedTokenControls && ready.Emotes, "Launcher did not verify all current controls");
+                Assert(ready.Hash == PatchEngine.Hash(target) && ready.Hash != original, "Launcher returned an unpatched or stale inspection");
+                Assert(state.OriginalHash == original && state.PatchedHash == ready.Hash, "Launcher did not retain the verified install hashes");
+                Assert(PatchEngine.Hash(Path.Combine(root, ".bongo-claim", "backups", original + ".dll")) == original, "Launcher lost or changed the original backup");
+            });
+            Test("repeated launcher preparation leaves the installed DLL and state untouched", delegate {
+                var root = NewGame(); var first = StartupLauncher.Prepare(root); var target = PatchEngine.GameAssembly(root);
+                var statePath = Path.Combine(root, ".bongo-claim", "install.json"); var state = File.ReadAllText(statePath);
+                var dllWrite = File.GetLastWriteTimeUtc(target); var stateWrite = File.GetLastWriteTimeUtc(statePath); var before = snapshot(root);
+                var second = StartupLauncher.Prepare(root);
+                Assert(second.Hash == first.Hash && snapshot(root).SequenceEqual(before), "Second preparation rewrote or added an installed file");
+                Assert(File.ReadAllText(statePath) == state && File.GetLastWriteTimeUtc(target) == dllWrite && File.GetLastWriteTimeUtc(statePath) == stateWrite, "Second preparation replaced the DLL or install state");
+            });
+            Test("launcher repairs a compatible Steam replacement and retains both original backups", delegate {
+                var root = NewGame(); StartupLauncher.Prepare(root); var prior = PatchEngine.LoadState(root); var target = PatchEngine.GameAssembly(root);
+                using (var asm = AssemblyDefinition.ReadAssembly(fixture)) { asm.MainModule.Mvid = Guid.NewGuid(); asm.Write(target); }
+                var updated = PatchEngine.Hash(target); Assert(updated != prior.OriginalHash, "Replacement fixture did not represent a new build");
+                var repaired = StartupLauncher.Prepare(root); var current = PatchEngine.LoadState(root);
+                Assert(repaired.Supported && repaired.OwnedTokenControls && current.OriginalHash == updated && current.PatchedHash == repaired.Hash, "Launcher did not rebuild and verify the replacement");
+                Assert(PatchEngine.Hash(Path.Combine(root, ".bongo-claim", "backups", prior.OriginalHash + ".dll")) == prior.OriginalHash, "Launcher overwrote the older build backup");
+                Assert(PatchEngine.Hash(Path.Combine(root, ".bongo-claim", "backups", updated + ".dll")) == updated, "Launcher did not back up the new original build");
+            });
+            Test("launcher rejects an unsupported replacement without writing game or backup files", delegate {
+                var root = NewGame(); StartupLauncher.Prepare(root); var target = PatchEngine.GameAssembly(root);
+                using (var asm = AssemblyDefinition.ReadAssembly(fixture)) { asm.MainModule.Types.Single(t => t.FullName == "BongoCat.Shop").Methods.Single(m => m.Name == "OnChestReady").Name = "UnsupportedUpdate"; asm.Write(target); }
+                var before = snapshot(root); Throws(delegate { StartupLauncher.Prepare(root); }, "cannot be started");
+                Assert(snapshot(root).SequenceEqual(before), "Rejected replacement modified the game, prior state or backups");
+            });
+            Test("launcher blocks Steam update flag 6 before creating a patch or backup", delegate {
+                var root = newSteamGame(); var manifest = manifestPath(root); File.WriteAllText(manifest, "\"AppState\" { \"StateFlags\" \"6\" }");
+                var before = snapshot(root); var manifestHash = PatchEngine.Hash(manifest);
+                Assert(StartupLauncher.IsUpdatePending(File.ReadAllText(manifest)), "Pending update flags were accepted");
+                Throws(delegate { StartupLauncher.Prepare(root); }, "pending or incomplete");
+                Assert(snapshot(root).SequenceEqual(before) && !Directory.Exists(Path.Combine(root, ".bongo-claim")), "Update guard wrote a patch or backup before rejecting");
+                Assert(PatchEngine.Hash(manifest) == manifestHash, "Update guard changed Steam's manifest");
+            });
+            Test("launcher accepts the fully installed Steam manifest flag 4", delegate {
+                var root = newSteamGame(); var manifest = manifestPath(root); File.WriteAllText(manifest, "\"AppState\" { \"StateFlags\" \"4\" }"); var manifestHash = PatchEngine.Hash(manifest);
+                Assert(!StartupLauncher.IsUpdatePending(File.ReadAllText(manifest)), "Fully installed state was blocked");
+                var ready = StartupLauncher.Prepare(root); Assert(ready.Supported && ready.OwnedTokenControls, "Installed manifest prevented preparation");
+                Assert(PatchEngine.Hash(manifest) == manifestHash, "Preparation changed Steam's manifest");
+            });
+            Test("launcher rejects noninstalled and unfamiliar Steam flag combinations without writes", delegate {
+                foreach (var flags in new[] { "0", "2", "5", "1024", "18446744073709551615" }) {
+                    var root = newSteamGame(); File.WriteAllText(manifestPath(root), "\"StateFlags\" \"" + flags + "\""); var before = snapshot(root);
+                    Assert(StartupLauncher.IsUpdatePending(File.ReadAllText(manifestPath(root))), "Unready flag was accepted: " + flags);
+                    Throws(delegate { StartupLauncher.Prepare(root); }, "pending or incomplete");
+                    Assert(snapshot(root).SequenceEqual(before) && !Directory.Exists(Path.Combine(root, ".bongo-claim")), "Unready manifest wrote game files: " + flags);
+                }
+            });
+            Test("launcher fails closed for missing, malformed and overflowing Steam manifest flags", delegate {
+                Assert(StartupLauncher.IsUpdatePending(null), "Absent manifest text was accepted");
+                foreach (var manifest in new[] { "", "\"AppState\" { }", "\"StateFlags\" \"ready\"", "\"StateFlags\" \"-4\"", "\"StateFlags\" \"18446744073709551616\"" }) {
+                    var root = newSteamGame(); File.WriteAllText(manifestPath(root), manifest); var before = snapshot(root);
+                    Assert(StartupLauncher.IsUpdatePending(manifest), "Malformed manifest text was accepted");
+                    Throws(delegate { StartupLauncher.Prepare(root); }, "pending or incomplete");
+                    Assert(snapshot(root).SequenceEqual(before) && !Directory.Exists(Path.Combine(root, ".bongo-claim")), "Malformed manifest wrote game files");
+                }
+            });
+        }
         public static int Main()
         {
             temp = Path.Combine(Path.GetTempPath(), "BongoClaimTests-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp);
@@ -455,6 +529,7 @@ namespace BongoClaim
                     Assert(!PatchEngine.Inspect(input).Supported, "Other mod accepted");
                 });
                 FeatureTests();
+                StartupTests();
                 Console.WriteLine("All " + passed + " tests passed."); return 0;
             }
             catch (Exception ex)
